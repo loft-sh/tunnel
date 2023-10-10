@@ -16,6 +16,16 @@ linters:
     - structcheck
     - varcheck
 
+    - exhaustruct
+    - nlreturn
+    - varnamelen
+    - lll
+    - wsl
+    - gosec
+    - gomnd
+    - gochecknoglobals
+    - makezero
+
 linters-settings:
   gofmt:
     simplify: true
@@ -124,6 +134,18 @@ linters-settings:
       - yaml
       - xml
       - form
+
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - tailscale.com
+          - github.com/google/uuid
+          - github.com/loft-sh
+          - github.com/go-chi/chi
+          - github.com/jba/muxpatterns
+          - github.com/klauspost/compress/zstd
 
 issues:
   # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
