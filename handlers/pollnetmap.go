@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -35,59 +34,49 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			return
 		}
 
-		res, err := coordinator.PollNetMap(req, peerPublicKey, false)
-		if err != nil {
-			handleAPIError(w, err, "Failed to poll netmap")
-			return
-		}
+		closeChan := make(chan struct{})
 
-		if err := writeResponse(w, req.Compress, res); err != nil {
-			handleAPIError(w, err, "Failed to write response")
-			return
-		}
+		resChan, errChan := coordinator.PollNetMap(req, peerPublicKey, closeChan)
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
+		defer keepAliveTicker.Stop()
 
-		updateLoop(ctx, coordinator, req, peerPublicKey, w)
-	}
-}
+		var (
+			res  tailcfg.MapResponse
+			more bool
+		)
 
-func updateLoop(ctx context.Context, coordinator tunnel.TailscaleCoordinator, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, w http.ResponseWriter) {
-	keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
-	defer keepAliveTicker.Stop()
-
-	syncTicker := time.NewTicker(coordinator.SyncInterval())
-	defer syncTicker.Stop()
-
-	var (
-		res tailcfg.MapResponse
-		err error
-	)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-keepAliveTicker.C:
-			now := time.Now()
-			res = tailcfg.MapResponse{
-				KeepAlive:   true,
-				ControlTime: &now,
+		for {
+			select {
+			case _, more = <-ctx.Done():
+			case err, more = <-errChan:
+			case res, more = <-resChan:
+			case _, more = <-keepAliveTicker.C:
+				now := time.Now()
+				res = tailcfg.MapResponse{
+					KeepAlive:   true,
+					ControlTime: &now,
+				}
 			}
-		case <-syncTicker.C:
-			res, err = coordinator.PollNetMap(req, peerPublicKey, true)
+
+			if !more {
+				close(closeChan)
+				return
+			}
+
+			if err != nil {
+				handleAPIError(w, err, "Failed to poll netmap")
+				close(closeChan)
+				return
+			}
+
+			if err := writeResponse(w, req.Compress, res); err != nil {
+				handleAPIError(w, err, "Failed to write response")
+				close(closeChan)
+				return
+			}
 		}
 
-		if err != nil {
-			handleAPIError(w, err, "Failed to poll netmap")
-			return
-		}
-
-		if err := writeResponse(w, req.Compress, res); err != nil {
-			handleAPIError(w, err, "Failed to write response")
-			return
-		}
 	}
 }
 

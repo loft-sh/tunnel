@@ -99,47 +99,50 @@ func (t *TSCoordinator) KeepAliveInterval() time.Duration {
 	return 60 * time.Second
 }
 
-// SyncInterval implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) SyncInterval() time.Duration {
-	return 30 * time.Second
-}
-
 // PollNetMap implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error) {
-	log.Printf("PollNetMap - req - PeerPublicKey - delta: %+v %+v %+v", req, peerPublicKey, delta)
+func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error) {
+	log.Printf("PollNetMap - req - PeerPublicKey: %+v %+v", req, peerPublicKey)
 
-	derpMap, err := t.DerpMap()
-	if err != nil {
-		return tailcfg.MapResponse{}, err
-	}
+	resChan := make(chan tailcfg.MapResponse)
+	errChan := make(chan error)
 
-	now := time.Now()
-	online := true
+	go func() {
+		derpMap, err := t.DerpMap()
+		if err != nil {
+			errChan <- err
+			return
+		}
 
-	response := tailcfg.MapResponse{
-		MapSessionHandle: req.MapSessionHandle,
-		ControlTime:      &now,
-		Node: &tailcfg.Node{
-			Name:              fmt.Sprintf("%s.ts.loft.sh", req.Hostinfo.Hostname),
-			User:              tailcfg.UserID(123),
-			ID:                tailcfg.NodeID(1001),
-			StableID:          tailcfg.StableNodeID("1001"),
-			Online:            &online,
-			LastSeen:          &now,
-			MachineAuthorized: true,
-		},
-		DERPMap: &derpMap,
-		Domain:  "ts.loft.sh",
-	}
+		now := time.Now()
+		online := true
 
-	if req.OmitPeers {
-		response.Peers = nil
-		response.PeersChanged = nil
-		response.PeersRemoved = nil
-		response.PeersChangedPatch = nil
-	}
+		response := tailcfg.MapResponse{
+			MapSessionHandle: req.MapSessionHandle,
+			ControlTime:      &now,
+			Node: &tailcfg.Node{
+				Name:              fmt.Sprintf("%s.ts.loft.sh", req.Hostinfo.Hostname),
+				User:              tailcfg.UserID(123),
+				ID:                tailcfg.NodeID(1001),
+				StableID:          tailcfg.StableNodeID("1001"),
+				Online:            &online,
+				LastSeen:          &now,
+				MachineAuthorized: true,
+			},
+			DERPMap: &derpMap,
+			Domain:  "ts.loft.sh",
+		}
 
-	return response, nil
+		if req.OmitPeers {
+			response.Peers = nil
+			response.PeersChanged = nil
+			response.PeersRemoved = nil
+			response.PeersChangedPatch = nil
+		}
+
+		resChan <- response
+	}()
+
+	return resChan, errChan
 }
 
 // RegisterMachine implements tunnel.TailscaleCoordinator.

@@ -15,9 +15,8 @@ type TailscaleCoordinator interface {
 
 	DerpMap() (tailcfg.DERPMap, error)
 
-	SyncInterval() time.Duration
 	KeepAliveInterval() time.Duration
-	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error)
+	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error)
 
 	SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
 

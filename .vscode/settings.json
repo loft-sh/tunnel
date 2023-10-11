@@ -3,6 +3,7 @@
 		"controlhttp",
 		"Derp",
 		"muxpatterns",
+		"netmap",
 		"netutil",
 		"tailcfg",
 		"tailscale",
