@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -29,39 +31,42 @@ func main() {
 	}
 }
 
+// -- Tailscale Coordinator --
+
 type TSCoordinator struct {
-	controlKey        key.MachinePrivate
-	legacyControlKey  key.MachinePrivate
-	keepAliveInterval time.Duration
-	syncInterval      time.Duration
+	controlKey       key.MachinePrivate
+	legacyControlKey key.MachinePrivate
 }
 
-// KeepAliveInterval implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) KeepAliveInterval() time.Duration {
-	return t.keepAliveInterval
-}
-
-// SyncInterval implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) SyncInterval() time.Duration {
-	return t.syncInterval
-}
-
-// PollNetMap implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (tailcfg.MapResponse, error) {
-	now := time.Now()
-
-	return tailcfg.MapResponse{
-		MapSessionHandle: req.MapSessionHandle,
-		ControlTime:      &now,
-		KeepAlive:        true,
+// DerpMap implements tunnel.TailscaleCoordinator.
+func (*TSCoordinator) DerpMap() (tailcfg.DERPMap, error) {
+	return tailcfg.DERPMap{
+		Regions: map[int]*tailcfg.DERPRegion{
+			900: {
+				RegionID:   900,
+				RegionCode: "loft",
+				RegionName: "Embedded Loft DERP",
+				Avoid:      false,
+				Nodes: []*tailcfg.DERPNode{
+					{
+						Name:     "Embedded Loft DERP",
+						RegionID: 900,
+						HostName: "localhost",
+						IPv4:     "127.0.0.1",
+						DERPPort: 3340,
+					},
+				},
+			},
+		},
+		OmitDefaultRegions: true,
 	}, nil
 }
 
-// RegisterMachine implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
-	return tailcfg.RegisterResponse{
-		MachineAuthorized: true,
-	}, nil
+func NewTSCoordinator() *TSCoordinator {
+	return &TSCoordinator{
+		controlKey:       key.NewMachine(),
+		legacyControlKey: key.NewMachine(),
+	}
 }
 
 // ControlKey implements tunnel.TailscaleCoordinator.
@@ -74,13 +79,74 @@ func (t *TSCoordinator) LegacyControlKey() key.MachinePrivate {
 	return t.legacyControlKey
 }
 
-func NewTSCoordinator() *TSCoordinator {
-	return &TSCoordinator{
-		controlKey:        key.NewMachine(),
-		legacyControlKey:  key.NewMachine(),
-		keepAliveInterval: 60 * time.Second,
-		syncInterval:      30 * time.Second,
+// KeepAliveInterval implements tunnel.TailscaleCoordinator.
+func (t *TSCoordinator) KeepAliveInterval() time.Duration {
+	return 60 * time.Second
+}
+
+// SyncInterval implements tunnel.TailscaleCoordinator.
+func (t *TSCoordinator) SyncInterval() time.Duration {
+	return 30 * time.Second
+}
+
+// PollNetMap implements tunnel.TailscaleCoordinator.
+func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error) {
+
+	log.Printf("PollNetMap: %+v", req)
+
+	derpMap, err := t.DerpMap()
+	if err != nil {
+		return tailcfg.MapResponse{}, err
 	}
+
+	now := time.Now()
+	online := true
+
+	response := tailcfg.MapResponse{
+		MapSessionHandle: req.MapSessionHandle,
+		ControlTime:      &now,
+		Node: &tailcfg.Node{
+			Name:              fmt.Sprintf("%s.ts.loft.sh", req.Hostinfo.Hostname),
+			User:              tailcfg.UserID(123),
+			ID:                tailcfg.NodeID(1001),
+			StableID:          tailcfg.StableNodeID("1001"),
+			Online:            &online,
+			LastSeen:          &now,
+			MachineAuthorized: true,
+		},
+		DERPMap: &derpMap,
+		Domain:  "ts.loft.sh",
+	}
+
+	if req.OmitPeers {
+		response.Peers = nil
+		response.PeersChanged = nil
+		response.PeersRemoved = nil
+		response.PeersChangedPatch = nil
+	}
+
+	return response, nil
+}
+
+// RegisterMachine implements tunnel.TailscaleCoordinator.
+func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
+	userID := 123
+
+	res := tailcfg.RegisterResponse{
+		MachineAuthorized: true,
+		User: tailcfg.User{
+			ID:     tailcfg.UserID(userID),
+			Logins: []tailcfg.LoginID{tailcfg.LoginID(userID)},
+		},
+		Login: tailcfg.Login{
+			ID:          tailcfg.LoginID(userID),
+			Provider:    req.Auth.Provider,
+			LoginName:   req.Auth.LoginName,
+			DisplayName: "MyDisplayName",
+		},
+	}
+
+	return res, nil
 }
 
 var _ tunnel.TailscaleCoordinator = (*TSCoordinator)(nil)

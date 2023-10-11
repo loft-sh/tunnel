@@ -38,7 +38,7 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			return
 		}
 
-		res, err := coordinator.PollNetMap(req, peerPublicKey)
+		res, err := coordinator.PollNetMap(req, peerPublicKey, false)
 		if err != nil {
 			handleAPIError(w, err, "Failed to poll netmap")
 			return
@@ -54,28 +54,29 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 }
 
 func updateLoop(ctx context.Context, coordinator tunnel.TailscaleCoordinator, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, w http.ResponseWriter) {
-
 	keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
 	defer keepAliveTicker.Stop()
 
 	syncTicker := time.NewTicker(coordinator.SyncInterval())
 	defer syncTicker.Stop()
 
-	for {
-		var (
-			res tailcfg.MapResponse
-			err error
-		)
+	var (
+		res tailcfg.MapResponse
+		err error
+	)
 
+	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-keepAliveTicker.C:
+			now := time.Now()
 			res = tailcfg.MapResponse{
-				KeepAlive: true,
+				KeepAlive:   true,
+				ControlTime: &now,
 			}
 		case <-syncTicker.C:
-			res, err = coordinator.PollNetMap(req, peerPublicKey)
+			res, err = coordinator.PollNetMap(req, peerPublicKey, true)
 		}
 
 		if err != nil {

@@ -20,6 +20,7 @@ var (
 
 func init() {
 	envknob.Setenv("TS_DEBUG_NETMAP", "true")
+	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
 }
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	s := new(tsnet.Server)
 	s.ControlURL = "http://localhost:3000"
 	s.Hostname = *hostname
+	s.AuthKey = "authkey"
 	defer s.Close()
 
 	ln, err := s.Listen("tcp", *addr)

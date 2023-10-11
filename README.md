@@ -1,4 +1,4 @@
-# TailScale Coordinator Library
+# Tailscale Coordinator Library
 
 This is a library that simplifies the implementation and integration of a Tailscale control server into your Go application.
 
@@ -44,3 +44,10 @@ func NewTSCoordinator() tunnel.TailscaleCoordinator {
   // ...
 }
 ```
+
+## Inspiration
+
+This project is inspired by open-source tailscale control server implementations such as:
+
+- [Headschale](https://headscale.net)
+- [Ionscale](https://jsiebens.github.io/ionscale/)

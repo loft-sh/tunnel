@@ -13,7 +13,9 @@ type TailscaleCoordinator interface {
 
 	RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error)
 
+	DerpMap() (tailcfg.DERPMap, error)
+
 	SyncInterval() time.Duration
 	KeepAliveInterval() time.Duration
-	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (tailcfg.MapResponse, error)
+	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error)
 }

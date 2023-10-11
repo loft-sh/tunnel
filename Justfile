@@ -8,6 +8,9 @@ alias align := check-structalign
 _default:
   @just --list
 
+dev:
+  zellij -s tunnel --layout tunnel_layout.kdl
+
 # --- Code quality ---
 
 # Run golangci-lint for all packages
