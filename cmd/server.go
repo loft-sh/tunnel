@@ -106,7 +106,7 @@ func (t *TSCoordinator) SyncInterval() time.Duration {
 
 // PollNetMap implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error) {
-	log.Printf("PollNetMap: %+v", req)
+	log.Printf("PollNetMap - req - PeerPublicKey - delta: %+v %+v %+v", req, peerPublicKey, delta)
 
 	derpMap, err := t.DerpMap()
 	if err != nil {

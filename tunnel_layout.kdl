@@ -19,16 +19,18 @@ layout {
     }
   }
 
-  tab name="Client" {
+  tab name="Coordinator" split_direction="vertical" {
     pane {
-      cwd "examples/tsnet"
-    }
-  }
-
-  tab name="Server" {
-    pane {
+      name "Server"
       command "air"
       cwd "."
+
+      focus true
+    }
+
+    pane {
+      name "Client"
+      cwd "examples/tsnet"
     }
   }
 }
