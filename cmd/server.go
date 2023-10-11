@@ -38,6 +38,28 @@ type TSCoordinator struct {
 	legacyControlKey key.MachinePrivate
 }
 
+func NewTSCoordinator() *TSCoordinator {
+	return &TSCoordinator{
+		controlKey:       key.NewMachine(),
+		legacyControlKey: key.NewMachine(),
+	}
+}
+
+// HealthChange implements tunnel.TailscaleCoordinator.
+func (*TSCoordinator) HealthChange(req tailcfg.HealthChangeRequest) {
+	panic("unimplemented")
+}
+
+// IDToken implements tunnel.TailscaleCoordinator.
+func (*TSCoordinator) IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
+	panic("unimplemented")
+}
+
+// SetDNS implements tunnel.TailscaleCoordinator.
+func (*TSCoordinator) SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
+	panic("unimplemented")
+}
+
 // DerpMap implements tunnel.TailscaleCoordinator.
 func (*TSCoordinator) DerpMap() (tailcfg.DERPMap, error) {
 	return tailcfg.DERPMap{
@@ -62,13 +84,6 @@ func (*TSCoordinator) DerpMap() (tailcfg.DERPMap, error) {
 	}, nil
 }
 
-func NewTSCoordinator() *TSCoordinator {
-	return &TSCoordinator{
-		controlKey:       key.NewMachine(),
-		legacyControlKey: key.NewMachine(),
-	}
-}
-
 // ControlKey implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) ControlKey() key.MachinePrivate {
 	return t.controlKey
@@ -91,7 +106,6 @@ func (t *TSCoordinator) SyncInterval() time.Duration {
 
 // PollNetMap implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error) {
-
 	log.Printf("PollNetMap: %+v", req)
 
 	derpMap, err := t.DerpMap()

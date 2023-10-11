@@ -26,9 +26,6 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
 		var req tailcfg.MapRequest
 
 		decoder := json.NewDecoder(r.Body)
@@ -48,6 +45,9 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			handleAPIError(w, err, "Failed to write response")
 			return
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 
 		updateLoop(ctx, coordinator, req, peerPublicKey, w)
 	}

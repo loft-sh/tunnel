@@ -14,9 +14,6 @@ const (
 
 func DerpMapHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
 		res, err := coordinator.DerpMap()
 		if err != nil {
 			handleAPIError(w, err, "Failed to get derp map")
@@ -24,6 +21,8 @@ func DerpMapHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(res)
 	}
 }

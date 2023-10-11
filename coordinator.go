@@ -18,4 +18,10 @@ type TailscaleCoordinator interface {
 	SyncInterval() time.Duration
 	KeepAliveInterval() time.Duration
 	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, delta bool) (tailcfg.MapResponse, error)
+
+	SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
+
+	HealthChange(req tailcfg.HealthChangeRequest)
+
+	IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error)
 }

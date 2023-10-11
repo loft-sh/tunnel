@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	IDTokenMethod  = http.MethodPost
-	IDTokenPattern = "/machine/id-token"
+	HealthChangeMethod  = http.MethodPost
+	HealthChangePattern = "/machine/health-change"
 )
 
-func IDTokenHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func HealthChangeHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req tailcfg.TokenRequest
+		var req tailcfg.HealthChangeRequest
 
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
@@ -24,14 +24,9 @@ func IDTokenHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.M
 			return
 		}
 
-		res, err := coordinator.IDToken(req, peerPublicKey)
-		if err != nil {
-			handleAPIError(w, err, "Failed to set DNS")
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(res)
+
+		coordinator.HealthChange(req)
 	}
 }
