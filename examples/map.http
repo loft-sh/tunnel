@@ -1,0 +1,19 @@
+### Keep Alive
+
+POST http://localhost:3000/update-all
+content-type: application/json
+
+{
+  "KeepAlive": true
+}
+
+### Ping Request
+
+POST http://localhost:3000/update-all
+content-type: application/json
+
+{
+  "PingRequest": {
+    "URL": "http://localhost:3000/ping"
+  }
+}

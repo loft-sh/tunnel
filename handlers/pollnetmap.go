@@ -76,7 +76,6 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 				return
 			}
 		}
-
 	}
 }
 

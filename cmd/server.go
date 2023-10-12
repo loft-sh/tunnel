@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +31,31 @@ func main() {
 	coordinator := NewTSCoordinator()
 	r.Handle("/*", mux.CoordinatorHandler(coordinator))
 
+	r.Post("/update-all", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var res tailcfg.MapResponse
+
+		err := json.NewDecoder(r.Body).Decode(&res)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+			return
+		}
+
+		coordinator.nodeMutex.Lock()
+		for _, node := range coordinator.nodes {
+			select {
+			case node.NetMapChan <- res:
+			case <-node.CloseChan:
+			}
+		}
+		coordinator.nodeMutex.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success": true}`))
+	})
+
 	if err := http.ListenAndServe(":3000", r); err != nil {
 		panic(err)
 	}
@@ -36,12 +66,33 @@ func main() {
 type TSCoordinator struct {
 	controlKey       key.MachinePrivate
 	legacyControlKey key.MachinePrivate
+
+	nodeMutex sync.Mutex
+	nodes     map[string]TSNodeChannels
+}
+
+type TSNodeChannels struct {
+	NetMapChan chan tailcfg.MapResponse
+	ErrChan    chan error
+	CloseChan  chan struct{}
 }
 
 func NewTSCoordinator() *TSCoordinator {
+	controlKey, err := readOrCreatePrivateKey("tmp/control.key")
+	if err != nil {
+		panic(err)
+	}
+
+	legacyControlKey, err := readOrCreatePrivateKey("tmp/legacy.key")
+	if err != nil {
+		panic(err)
+	}
+
 	return &TSCoordinator{
-		controlKey:       key.NewMachine(),
-		legacyControlKey: key.NewMachine(),
+		controlKey:       *controlKey,
+		legacyControlKey: *legacyControlKey,
+		nodeMutex:        sync.Mutex{},
+		nodes:            make(map[string]TSNodeChannels),
 	}
 }
 
@@ -101,10 +152,19 @@ func (t *TSCoordinator) KeepAliveInterval() time.Duration {
 
 // PollNetMap implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error) {
-	log.Printf("PollNetMap - req - PeerPublicKey: %+v %+v", req, peerPublicKey)
+	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
+	log.Printf("PollNetMap - req: %v", string(s))
 
 	resChan := make(chan tailcfg.MapResponse)
 	errChan := make(chan error)
+
+	t.nodeMutex.Lock()
+	t.nodes[peerPublicKey.String()] = TSNodeChannels{
+		NetMapChan: resChan,
+		ErrChan:    errChan,
+		CloseChan:  closeChannel,
+	}
+	t.nodeMutex.Unlock()
 
 	go func() {
 		derpMap, err := t.DerpMap()
@@ -167,3 +227,46 @@ func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 }
 
 var _ tunnel.TailscaleCoordinator = (*TSCoordinator)(nil)
+
+// --- Utils ---
+
+func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
+	privateKey, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		machineKey := key.NewMachine()
+
+		machineKeyStr, err := machineKey.MarshalText()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to convert private key to string for saving: %w",
+				err,
+			)
+		}
+		err = os.WriteFile(path, machineKeyStr, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to save private key to disk: %w",
+				err,
+			)
+		}
+
+		return &machineKey, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read private key file: %w", err)
+	}
+
+	trimmedPrivateKey := strings.TrimSpace(string(privateKey))
+
+	privateKeyEnsurePrefix := trimmedPrivateKey
+
+	if !strings.HasPrefix(trimmedPrivateKey, "privkey:") {
+		privateKeyEnsurePrefix = "privkey:" + trimmedPrivateKey
+	}
+
+	var machineKey key.MachinePrivate
+	if err = machineKey.UnmarshalText([]byte(privateKeyEnsurePrefix)); err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	return &machineKey, nil
+}

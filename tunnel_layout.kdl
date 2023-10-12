@@ -24,13 +24,19 @@ layout {
       name "Server"
       command "air"
       cwd "."
-
-      focus true
     }
 
     pane {
-      name "Client"
-      cwd "examples/tsnet"
+      pane {
+        name "tsnet example"
+        cwd "examples/tsnet"
+      }
+      pane {
+        name "Tunnel"
+        cwd "."
+
+        focus true
+      }
     }
   }
 }
