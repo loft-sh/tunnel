@@ -2,13 +2,10 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jba/muxpatterns"
 	"github.com/loft-sh/tunnel"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -45,22 +42,7 @@ func NoiseHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
 }
 
 func CreatePeerHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.Handler {
-	mux := muxpatterns.NewServeMux()
-
-	mux.HandleFunc(fmt.Sprintf("%s %s", RegistrationMethod, RegistrationPattern), RegistrationHandler(coordinator, peerPublicKey))
-	mux.HandleFunc(fmt.Sprintf("%s %s", PollNetMapMethod, PollNetMapPattern), PollNetMapHandler(coordinator, peerPublicKey))
-	mux.HandleFunc(fmt.Sprintf("%s %s", SetDNSMethod, SetDNSPattern), SetDNSHandler(coordinator, peerPublicKey))
-	mux.HandleFunc(fmt.Sprintf("%s %s", HealthChangeMethod, HealthChangePattern), HealthChangeHandler(coordinator, peerPublicKey))
-	mux.HandleFunc(fmt.Sprintf("%s %s", IDTokenMethod, IDTokenPattern), IDTokenHandler(coordinator, peerPublicKey))
-
-	return mux
-}
-
-func CreateChiPeerHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.Handler {
-	r := chi.NewRouter()
-
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r := chi.NewMux()
 
 	r.MethodFunc(RegistrationMethod, RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
 	r.MethodFunc(PollNetMapMethod, PollNetMapPattern, PollNetMapHandler(coordinator, peerPublicKey))

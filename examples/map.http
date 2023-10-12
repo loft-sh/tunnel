@@ -1,3 +1,7 @@
+### Get connected nodes
+
+GET http://localhost:3000/nodes
+
 ### Keep Alive
 
 POST http://localhost:3000/update-all

@@ -23,6 +23,7 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("welcome"))
@@ -46,14 +47,32 @@ func main() {
 		coordinator.nodeMutex.Lock()
 		for _, node := range coordinator.nodes {
 			select {
-			case node.NetMapChan <- res:
 			case <-node.CloseChan:
+			case node.NetMapChan <- res:
 			}
 		}
 		coordinator.nodeMutex.Unlock()
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success": true}`))
+	})
+
+	r.Get("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		coordinator.nodeMutex.Lock()
+		defer coordinator.nodeMutex.Unlock()
+
+		nodes := []string{}
+		for k := range coordinator.nodes {
+			nodes = append(nodes, k)
+		}
+
+		err := json.NewEncoder(w).Encode(nodes)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+		}
 	})
 
 	if err := http.ListenAndServe(":3000", r); err != nil {
@@ -72,6 +91,7 @@ type TSCoordinator struct {
 }
 
 type TSNodeChannels struct {
+	MapRequest tailcfg.MapRequest
 	NetMapChan chan tailcfg.MapResponse
 	ErrChan    chan error
 	CloseChan  chan struct{}
@@ -153,18 +173,27 @@ func (t *TSCoordinator) KeepAliveInterval() time.Duration {
 // PollNetMap implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error) {
 	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
-	log.Printf("PollNetMap - req: %v", string(s))
+	log.Printf("PollNetMap - %s %s %v", peerPublicKey.String(), req.NodeKey.String(), string(s))
 
 	resChan := make(chan tailcfg.MapResponse)
 	errChan := make(chan error)
 
 	t.nodeMutex.Lock()
-	t.nodes[peerPublicKey.String()] = TSNodeChannels{
+	t.nodes[req.NodeKey.String()] = TSNodeChannels{
+		MapRequest: req,
 		NetMapChan: resChan,
 		ErrChan:    errChan,
 		CloseChan:  closeChannel,
 	}
 	t.nodeMutex.Unlock()
+
+	go func() {
+		<-closeChannel
+
+		t.nodeMutex.Lock()
+		delete(t.nodes, req.NodeKey.String())
+		t.nodeMutex.Unlock()
+	}()
 
 	go func() {
 		derpMap, err := t.DerpMap()
@@ -207,6 +236,9 @@ func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.Mac
 
 // RegisterMachine implements tunnel.TailscaleCoordinator.
 func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
+	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
+	log.Printf("RegisterMachine - %s %s %v", peerPublicKey.String(), req.NodeKey.String(), string(s))
+
 	userID := 123
 
 	res := tailcfg.RegisterResponse{

@@ -51,8 +51,6 @@ github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvK
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hdevalence/ed25519consensus v0.1.0 h1:jtBwzzcHuTmFrQN6xQZn6CQEO/V9f7HsjsjeEZ6auqU=
 github.com/hdevalence/ed25519consensus v0.1.0/go.mod h1:w3BHWjwJbFU29IRHL1Iqkw3sus+7FctEyM4RqDxYNzo=
-github.com/jba/muxpatterns v0.3.0 h1:4mumR8LmA/7vUigN/BmUXtHXbwZOzggVuX9Dgqtw67c=
-github.com/jba/muxpatterns v0.3.0/go.mod h1:77+op56At17SXLuQrR46FWJybINlMcj2E/KrDhS5JiY=
 github.com/josharian/native v1.1.1-0.20230202152459-5c7d0dd6ab86 h1:elKwZS1OcdQ0WwEDBeqxKwb7WB62QX8bvZ/FJnVXIfk=
 github.com/josharian/native v1.1.1-0.20230202152459-5c7d0dd6ab86/go.mod h1:aFAMtuldEgx/4q7iSGazk22+IcgvtiC+HIimFO9XlS8=
 github.com/jsimonetti/rtnetlink v1.3.2 h1:dcn0uWkfxycEEyNy0IGfx3GrhQ38LH7odjxAghimsVI=

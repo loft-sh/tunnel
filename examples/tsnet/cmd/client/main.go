@@ -28,6 +28,7 @@ func main() {
 
 	s := new(tsnet.Server)
 	s.ControlURL = "http://localhost:3000"
+	s.AuthKey = "abc"
 	defer s.Close()
 
 	if err := s.Start(); err != nil {

@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	SetDNSMethod  = http.MethodPost
-	SetDNSPattern = "/machine/set-dns"
+	SetDNSMethod        = http.MethodPost
+	SetDNSPattern       = "/machine/set-dns"
+	SetDNSLegacyPattern = "/machine/{mkeyhex}/set-dns"
 )
 
 func SetDNSHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {

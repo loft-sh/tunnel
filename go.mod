@@ -4,7 +4,6 @@ go 1.21.2
 
 require (
 	github.com/go-chi/chi/v5 v5.0.10
-	github.com/jba/muxpatterns v0.3.0
 	github.com/klauspost/compress v1.16.7
 	golang.org/x/net v0.14.0
 	tailscale.com v1.50.1
