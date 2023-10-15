@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,10 +27,6 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("welcome"))
-	})
-
 	coordinator := NewTSCoordinator()
 	r.Handle("/*", mux.CoordinatorHandler(coordinator))
 
@@ -44,29 +42,32 @@ func main() {
 			return
 		}
 
+		counter := 0
+
 		coordinator.nodeMutex.Lock()
 		for _, node := range coordinator.nodes {
 			select {
-			case <-node.CloseChan:
 			case node.NetMapChan <- res:
+				counter++
+			case <-node.CloseChan:
 			}
 		}
 		coordinator.nodeMutex.Unlock()
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
+		_, _ = fmt.Fprintf(w, `{"success": true, "updated": %v}`, counter)
 	})
 
 	r.Get("/nodes", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		coordinator.nodeMutex.Lock()
-		defer coordinator.nodeMutex.Unlock()
-
 		nodes := []string{}
+
+		coordinator.nodeMutex.Lock()
 		for k := range coordinator.nodes {
 			nodes = append(nodes, k)
 		}
+		coordinator.nodeMutex.Unlock()
 
 		err := json.NewEncoder(w).Encode(nodes)
 		if err != nil {
@@ -205,20 +206,56 @@ func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.Mac
 		now := time.Now()
 		online := true
 
+		baseDomain := "ts.loft"
+
+		dnsConfig := &tailcfg.DNSConfig{
+			Proxied: true,
+
+			Domains: []string{baseDomain},
+
+			ExtraRecords: []tailcfg.DNSRecord{
+				{
+					Name:  "aa.ts.loft",
+					Type:  "A",
+					Value: "100.200.0.1",
+				},
+			},
+		}
+
+		node := tailcfg.Node{
+			Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), baseDomain),
+			User:              tailcfg.UserID(123),
+			ID:                tailcfg.NodeID(1001),
+			StableID:          tailcfg.StableNodeID("abcd"),
+			Online:            &online,
+			LastSeen:          &now,
+			MachineAuthorized: true,
+			Addresses:         []netip.Prefix{netip.MustParsePrefix("100.80.0.1/32")},
+			AllowedIPs:        []netip.Prefix{netip.MustParsePrefix("100.80.0.1/32")},
+
+			Key:     req.NodeKey,
+			Machine: peerPublicKey,
+		}
+
 		response := tailcfg.MapResponse{
 			MapSessionHandle: req.MapSessionHandle,
 			ControlTime:      &now,
-			Node: &tailcfg.Node{
-				Name:              fmt.Sprintf("%s.ts.loft.sh", req.Hostinfo.Hostname),
-				User:              tailcfg.UserID(123),
-				ID:                tailcfg.NodeID(1001),
-				StableID:          tailcfg.StableNodeID("1001"),
-				Online:            &online,
-				LastSeen:          &now,
-				MachineAuthorized: true,
+			Node:             &node,
+			DERPMap:          &derpMap,
+			Domain:           baseDomain,
+
+			Peers: []*tailcfg.Node{},
+
+			UserProfiles: []tailcfg.UserProfile{
+				{
+					ID:            123,
+					LoginName:     "thomas.kosiewski@loft.sh",
+					DisplayName:   "Thomas Kosiewski",
+					ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
+				},
 			},
-			DERPMap: &derpMap,
-			Domain:  "ts.loft.sh",
+
+			DNSConfig: dnsConfig,
 		}
 
 		if req.OmitPeers {
@@ -239,7 +276,14 @@ func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
 	log.Printf("RegisterMachine - %s %s %v", peerPublicKey.String(), req.NodeKey.String(), string(s))
 
-	userID := 123
+	if req.Auth.AuthKey == "" {
+		return tailcfg.RegisterResponse{}, errors.New("missing auth key")
+	}
+
+	userID, err := strconv.ParseInt(req.Auth.AuthKey, 10, 64)
+	if err != nil {
+		return tailcfg.RegisterResponse{}, fmt.Errorf("failed to parse auth key: %w", err)
+	}
 
 	res := tailcfg.RegisterResponse{
 		MachineAuthorized: true,
@@ -248,10 +292,9 @@ func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 			Logins: []tailcfg.LoginID{tailcfg.LoginID(userID)},
 		},
 		Login: tailcfg.Login{
-			ID:          tailcfg.LoginID(userID),
-			Provider:    req.Auth.Provider,
-			LoginName:   req.Auth.LoginName,
-			DisplayName: "MyDisplayName",
+			ID:        tailcfg.LoginID(userID),
+			Provider:  req.Auth.Provider,
+			LoginName: req.Auth.LoginName,
 		},
 	}
 

@@ -28,7 +28,7 @@ func main() {
 	s := new(tsnet.Server)
 	s.ControlURL = "http://localhost:3000"
 	s.Hostname = *hostname
-	s.AuthKey = "authkey"
+	s.AuthKey = "100"
 	defer s.Close()
 
 	ln, err := s.Listen("tcp", *addr)

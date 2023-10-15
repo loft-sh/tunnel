@@ -31,6 +31,13 @@ layout {
         name "tsnet example"
         cwd "examples/tsnet"
       }
+      // pane {
+      //   name "Tailscaled"
+      //   command "bash"
+      //   args "-c" " TS_DEBUG_USE_DERP_HTTP=true sudo -E tailscaled"
+
+      //   focus true
+      // }
       pane {
         name "Tunnel"
         cwd "."
