@@ -1,6 +1,6 @@
 module gitub.com/loft-sh/tunnel/examples/tsnet
 
-go 1.21.2
+go 1.21.3
 
 require tailscale.com v1.50.1
 
