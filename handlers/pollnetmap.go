@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,7 @@ const (
 
 func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+		ctx, cancel := context.WithCancelCause(r.Context())
 
 		var req tailcfg.MapRequest
 
@@ -34,9 +35,7 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			return
 		}
 
-		closeChan := make(chan struct{})
-
-		resChan, errChan := coordinator.PollNetMap(req, peerPublicKey, closeChan)
+		resChan, errChan := coordinator.PollNetMap(ctx, req, peerPublicKey)
 
 		keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
 		defer keepAliveTicker.Stop()
@@ -60,19 +59,19 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			}
 
 			if !more {
-				close(closeChan)
+				cancel(fmt.Errorf("poll netmap closed"))
 				return
 			}
 
 			if err != nil {
 				handleAPIError(w, err, "Failed to poll netmap")
-				close(closeChan)
+				cancel(err)
 				return
 			}
 
 			if err := writeResponse(w, req.Compress, res); err != nil {
 				handleAPIError(w, err, "Failed to write response")
-				close(closeChan)
+				cancel(err)
 				return
 			}
 		}

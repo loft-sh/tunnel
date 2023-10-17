@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/netip"
 	"os"
@@ -19,9 +19,39 @@ import (
 	"github.com/loft-sh/tunnel/mux"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
+
+	goipam "github.com/metal-stack/go-ipam"
+)
+
+const (
+	baseDomain = "ts.loft"
+
+	// https://tailscale.com/kb/1015/100.cidr-addresses/
+	cidr = "100.64.0.0/10"
+)
+
+var (
+	ipam   goipam.Ipamer
+	prefix *goipam.Prefix
 )
 
 func main() {
+	ctx := context.TODO()
+
+	ipam = goipam.New(ctx)
+
+	var err error
+	prefix, err = ipam.NewPrefix(ctx, cidr)
+	if err != nil {
+		panic(err)
+	}
+
+	// The 100.100.100.100 is reserved for MagicDNS
+	_, err = ipam.AcquireSpecificIP(ctx, prefix.Cidr, "100.100.100.100")
+	if err != nil {
+		panic(err)
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -49,7 +79,7 @@ func main() {
 			select {
 			case node.NetMapChan <- res:
 				counter++
-			case <-node.CloseChan:
+			default:
 			}
 		}
 		coordinator.nodeMutex.Unlock()
@@ -88,14 +118,24 @@ type TSCoordinator struct {
 	legacyControlKey key.MachinePrivate
 
 	nodeMutex sync.Mutex
-	nodes     map[string]TSNodeChannels
+	nodes     map[string]TSNode
 }
 
-type TSNodeChannels struct {
-	MapRequest tailcfg.MapRequest
+type TSNode struct {
+	Ctx context.Context
+
+	MapRequest      *tailcfg.MapRequest
+	RegisterRequest *tailcfg.RegisterRequest
+
+	UserID tailcfg.UserID
+	Node   *tailcfg.Node
+
+	NodeID tailcfg.NodeID
+
 	NetMapChan chan tailcfg.MapResponse
 	ErrChan    chan error
-	CloseChan  chan struct{}
+
+	IP *goipam.IP
 }
 
 func NewTSCoordinator() *TSCoordinator {
@@ -113,7 +153,7 @@ func NewTSCoordinator() *TSCoordinator {
 		controlKey:       *controlKey,
 		legacyControlKey: *legacyControlKey,
 		nodeMutex:        sync.Mutex{},
-		nodes:            make(map[string]TSNodeChannels),
+		nodes:            make(map[string]TSNode),
 	}
 }
 
@@ -172,29 +212,54 @@ func (t *TSCoordinator) KeepAliveInterval() time.Duration {
 }
 
 // PollNetMap implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error) {
-	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
-	log.Printf("PollNetMap - %s %s %v", peerPublicKey.String(), req.NodeKey.String(), string(s))
-
+func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error) {
 	resChan := make(chan tailcfg.MapResponse)
 	errChan := make(chan error)
 
 	t.nodeMutex.Lock()
-	t.nodes[req.NodeKey.String()] = TSNodeChannels{
-		MapRequest: req,
-		NetMapChan: resChan,
-		ErrChan:    errChan,
-		CloseChan:  closeChannel,
+	defer t.nodeMutex.Unlock()
+
+	if _, ok := t.nodes[req.NodeKey.String()]; !ok {
+		go func() { errChan <- fmt.Errorf("node %v not registered", req.NodeKey.String()) }()
+		return resChan, errChan
 	}
-	t.nodeMutex.Unlock()
 
-	go func() {
-		<-closeChannel
+	node := t.nodes[req.NodeKey.String()]
 
-		t.nodeMutex.Lock()
-		delete(t.nodes, req.NodeKey.String())
-		t.nodeMutex.Unlock()
-	}()
+	if req.Stream {
+		node.Ctx = ctx
+		node.MapRequest = &req
+		node.NetMapChan = resChan
+		node.ErrChan = errChan
+	}
+
+	var err error
+
+	if node.IP == nil {
+		node.IP, err = ipam.AcquireIP(ctx, prefix.Cidr)
+		if err != nil {
+			go func() { errChan <- err }()
+			return resChan, errChan
+		}
+	}
+
+	t.nodes[req.NodeKey.String()] = node
+
+	// Cleanup goroutine on streaming request
+	if req.Stream {
+		go func() {
+			<-ctx.Done()
+
+			t.nodeMutex.Lock()
+			nodeId := t.nodes[req.NodeKey.String()].NodeID
+			delete(t.nodes, req.NodeKey.String())
+			t.nodeMutex.Unlock()
+
+			t.handlePeersRemoved(nodeId)
+
+			_, _ = ipam.ReleaseIP(ctx, node.IP)
+		}()
+	}
 
 	go func() {
 		derpMap, err := t.DerpMap()
@@ -206,8 +271,6 @@ func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.Mac
 		now := time.Now()
 		online := true
 
-		baseDomain := "ts.loft"
-
 		dnsConfig := &tailcfg.DNSConfig{
 			Proxied: true,
 
@@ -215,42 +278,98 @@ func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.Mac
 
 			ExtraRecords: []tailcfg.DNSRecord{
 				{
-					Name:  "aa.ts.loft",
+					Name:  fmt.Sprintf("aa.%s", baseDomain),
 					Type:  "A",
 					Value: "100.200.0.1",
 				},
 			},
 		}
 
-		node := tailcfg.Node{
-			Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), baseDomain),
-			User:              tailcfg.UserID(123),
-			ID:                tailcfg.NodeID(1001),
-			StableID:          tailcfg.StableNodeID("abcd"),
-			Online:            &online,
-			LastSeen:          &now,
-			MachineAuthorized: true,
-			Addresses:         []netip.Prefix{netip.MustParsePrefix("100.80.0.1/32")},
-			AllowedIPs:        []netip.Prefix{netip.MustParsePrefix("100.80.0.1/32")},
-
-			Key:     req.NodeKey,
-			Machine: peerPublicKey,
+		prefix, err := node.IP.IP.Prefix(32)
+		if err != nil {
+			errChan <- err
+			return
 		}
+
+		t.nodeMutex.Lock()
+		coordinatorNodeInfo := t.nodes[req.NodeKey.String()]
+
+		node := tailcfg.Node{
+			Addresses:         []netip.Prefix{prefix},
+			AllowedIPs:        []netip.Prefix{prefix},
+			DiscoKey:          req.DiscoKey,
+			Endpoints:         req.Endpoints,
+			Hostinfo:          req.Hostinfo.View(),
+			ID:                coordinatorNodeInfo.NodeID,
+			Key:               req.NodeKey,
+			LastSeen:          &now,
+			Machine:           peerPublicKey,
+			MachineAuthorized: true,
+			Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), baseDomain),
+			Online:            &online,
+			StableID:          tailcfg.StableNodeID(fmt.Sprintf("stable-%v", coordinatorNodeInfo.NodeID)),
+			User:              coordinatorNodeInfo.UserID,
+		}
+
+		if req.Hostinfo.NetInfo != nil {
+			node.DERP = fmt.Sprintf("127.3.3.40:%v", req.Hostinfo.NetInfo.PreferredDERP)
+		}
+
+		coordinatorNodeInfo.Node = &node
+		t.nodes[req.NodeKey.String()] = coordinatorNodeInfo
+
+		peers := []*tailcfg.Node{}
+
+		if !req.OmitPeers {
+			for _, peer := range t.nodes {
+				if peer.Node == nil {
+					continue
+				}
+
+				if peer.NodeID == node.ID {
+					continue
+				}
+
+				peers = append(peers, peer.Node)
+			}
+		}
+
+		t.nodeMutex.Unlock()
 
 		response := tailcfg.MapResponse{
 			MapSessionHandle: req.MapSessionHandle,
+			Seq:              req.MapSessionSeq + 1,
 			ControlTime:      &now,
-			Node:             &node,
-			DERPMap:          &derpMap,
-			Domain:           baseDomain,
 
-			Peers: []*tailcfg.Node{},
+			Node:    &node,
+			DERPMap: &derpMap,
+			Domain:  baseDomain,
+
+			Peers: peers,
 
 			UserProfiles: []tailcfg.UserProfile{
 				{
-					ID:            123,
+					ID:            node.User,
 					LoginName:     "thomas.kosiewski@loft.sh",
 					DisplayName:   "Thomas Kosiewski",
+					ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
+				},
+				{
+					ID:            100,
+					LoginName:     "thomas.kosiewski@loft.sh",
+					DisplayName:   "Thomas Kosiewski (100)",
+					ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
+				},
+				{
+					ID:            123,
+					LoginName:     "thomas.kosiewski@loft.sh",
+					DisplayName:   "Thomas Kosiewski (123)",
+					ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
+				},
+				{
+					ID:            200,
+					LoginName:     "thomas.kosiewski@loft.sh",
+					DisplayName:   "Thomas Kosiewski (200)",
 					ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
 				},
 			},
@@ -266,16 +385,88 @@ func (t *TSCoordinator) PollNetMap(req tailcfg.MapRequest, peerPublicKey key.Mac
 		}
 
 		resChan <- response
+
+		go t.handleNewPeerChange(node)
+
+		if !req.Stream {
+			close(resChan)
+			close(errChan)
+		}
 	}()
 
 	return resChan, errChan
 }
 
-// RegisterMachine implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
-	s, _ := json.MarshalIndent(req, "", "  ") //nolint:errchkjson
-	log.Printf("RegisterMachine - %s %s %v", peerPublicKey.String(), req.NodeKey.String(), string(s))
+func (t *TSCoordinator) handleNewPeerChange(newNode tailcfg.Node) {
+	t.nodeMutex.Lock()
+	for _, node := range t.nodes {
 
+		if node.Node == nil || node.Node.ID == newNode.ID {
+			continue
+		}
+
+		if node.MapRequest == nil {
+			continue
+		}
+
+		res := tailcfg.MapResponse{
+			MapSessionHandle: node.MapRequest.MapSessionHandle,
+			Seq:              node.MapRequest.MapSessionSeq + 1,
+
+			PeersChanged:   []*tailcfg.Node{&newNode},
+			PeerSeenChange: map[tailcfg.NodeID]bool{newNode.ID: true},
+			OnlineChange:   map[tailcfg.NodeID]bool{newNode.ID: true},
+
+			PacketFilter: []tailcfg.FilterRule{{
+				SrcIPs: []string{"*"},
+				DstPorts: []tailcfg.NetPortRange{{
+					IP:    "*",
+					Ports: tailcfg.PortRangeAny,
+				}},
+			}},
+			// SSHPolicy:                 &tailcfg.SSHPolicy{},
+		}
+
+		select {
+		case <-node.Ctx.Done():
+		case node.NetMapChan <- res:
+		}
+	}
+	t.nodeMutex.Unlock()
+}
+
+func (t *TSCoordinator) handlePeersRemoved(nodeID tailcfg.NodeID) {
+	t.nodeMutex.Lock()
+	for _, node := range t.nodes {
+		if node.NodeID == nodeID {
+			continue
+		}
+
+		if node.MapRequest == nil {
+			continue
+		}
+
+		res := tailcfg.MapResponse{
+			MapSessionHandle: node.MapRequest.MapSessionHandle,
+			Seq:              node.MapRequest.MapSessionSeq + 1,
+
+			PeersRemoved:   []tailcfg.NodeID{nodeID},
+			PeerSeenChange: map[tailcfg.NodeID]bool{nodeID: false},
+			OnlineChange:   map[tailcfg.NodeID]bool{nodeID: false},
+			// PacketFilter:              []tailcfg.FilterRule{},
+			// SSHPolicy:                 &tailcfg.SSHPolicy{},
+		}
+
+		select {
+		case <-node.Ctx.Done():
+		case node.NetMapChan <- res:
+		}
+	}
+	t.nodeMutex.Unlock()
+}
+
+// RegisterMachine implements tunnel.TailscaleCoordinator.
+func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
 	if req.Auth.AuthKey == "" {
 		return tailcfg.RegisterResponse{}, errors.New("missing auth key")
 	}
@@ -284,6 +475,15 @@ func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 	if err != nil {
 		return tailcfg.RegisterResponse{}, fmt.Errorf("failed to parse auth key: %w", err)
 	}
+
+	// TODO: Check for  "1970-01-01T01:02:03+01:00"
+	// if req.Expiry.Equal(time.UnixMicro(0)) {
+	// 	t.nodeMutex.Lock()
+	// 	delete(t.nodes, req.NodeKey.String())
+	// 	t.nodeMutex.Unlock()
+
+	// 	return tailcfg.RegisterResponse{}, errors.New("node has logged out")
+	// }
 
 	res := tailcfg.RegisterResponse{
 		MachineAuthorized: true,
@@ -297,6 +497,14 @@ func (*TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 			LoginName: req.Auth.LoginName,
 		},
 	}
+
+	t.nodeMutex.Lock()
+	t.nodes[req.NodeKey.String()] = TSNode{
+		UserID:          tailcfg.UserID(userID),
+		RegisterRequest: &req,
+		NodeID:          tailcfg.NodeID(len(t.nodes) + 1),
+	}
+	t.nodeMutex.Unlock()
 
 	return res, nil
 }

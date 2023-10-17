@@ -19,7 +19,17 @@ var (
 )
 
 func init() {
-	envknob.Setenv("TS_DEBUG_NETMAP", "true")
+	// envknob.Setenv("TS_DEBUG_DERP_WS_CLIENT", "true")
+	// envknob.Setenv("TS_DEBUG_MAGICSOCK_PEERMAP", "true")
+	// envknob.Setenv("TS_DEBUG_MAP", "true")
+	// envknob.Setenv("TS_DEBUG_NETCHECK", "true")
+	// envknob.Setenv("TS_DEBUG_NETLINK", "true")
+	// envknob.Setenv("TS_DEBUG_NETMAP", "true")
+	// envknob.Setenv("TS_DEBUG_NETSTACK", "true")
+	// envknob.Setenv("TS_DEBUG_OMIT_LOCAL_ADDRS", "true")
+	// envknob.Setenv("TS_DEBUG_PATCHIFY_PEER", "true")
+	// envknob.Setenv("TS_DEBUG_PROFILES", "true")
+	// envknob.Setenv("TS_DEBUG_REGISTER", "true")
 	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
 }
 

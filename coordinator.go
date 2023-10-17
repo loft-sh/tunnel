@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"time"
 
 	"tailscale.com/tailcfg"
@@ -16,7 +17,7 @@ type TailscaleCoordinator interface {
 	DerpMap() (tailcfg.DERPMap, error)
 
 	KeepAliveInterval() time.Duration
-	PollNetMap(req tailcfg.MapRequest, peerPublicKey key.MachinePublic, closeChannel chan struct{}) (chan tailcfg.MapResponse, chan error)
+	PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
 
 	SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
 

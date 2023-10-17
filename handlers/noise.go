@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/loft-sh/tunnel"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -43,6 +44,9 @@ func NoiseHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
 
 func CreatePeerHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.Handler {
 	r := chi.NewMux()
+
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	r.MethodFunc(RegistrationMethod, RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
 	r.MethodFunc(PollNetMapMethod, PollNetMapPattern, PollNetMapHandler(coordinator, peerPublicKey))

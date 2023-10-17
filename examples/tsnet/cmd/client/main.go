@@ -11,8 +11,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"tailscale.com/envknob"
 	"tailscale.com/tsnet"
 )
+
+func init() {
+	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
+}
 
 func main() {
 	flag.Usage = func() {
@@ -29,6 +34,7 @@ func main() {
 	s := new(tsnet.Server)
 	s.ControlURL = "http://localhost:3000"
 	s.AuthKey = "200"
+	s.Hostname = "tshello-client"
 	defer s.Close()
 
 	if err := s.Start(); err != nil {
