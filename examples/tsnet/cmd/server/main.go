@@ -35,10 +35,12 @@ func init() {
 
 func main() {
 	flag.Parse()
-	s := new(tsnet.Server)
-	s.ControlURL = "http://localhost:3000"
-	s.Hostname = *hostname
-	s.AuthKey = "100"
+	s := &tsnet.Server{
+		AuthKey:    "100",
+		ControlURL: "http://localhost:3000",
+		Dir:        "./tsstate/tshello",
+		Hostname:   *hostname,
+	}
 	defer s.Close()
 
 	ln, err := s.Listen("tcp", *addr)

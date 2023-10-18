@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"tailscale.com/tailcfg"
@@ -24,4 +25,6 @@ type TailscaleCoordinator interface {
 	HealthChange(req tailcfg.HealthChangeRequest)
 
 	IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error)
+
+	SSHAction(r *http.Request, peerPublicKey key.MachinePublic) (tailcfg.SSHAction, error)
 }

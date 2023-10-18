@@ -31,10 +31,12 @@ func main() {
 	}
 	tailnetURL := flag.Arg(0)
 
-	s := new(tsnet.Server)
-	s.ControlURL = "http://localhost:3000"
-	s.AuthKey = "200"
-	s.Hostname = "tshello-client"
+	s := &tsnet.Server{
+		AuthKey:    "200",
+		ControlURL: "http://localhost:3000",
+		Dir:        "./tsstate/tshello-client",
+		Hostname:   "tshello-client",
+	}
 	defer s.Close()
 
 	if err := s.Start(); err != nil {

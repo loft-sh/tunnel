@@ -15,7 +15,7 @@ dev:
 
 # Run golangci-lint for all packages
 lint *ARGS:
-  golangci-lint run {{ARGS}} $@
+  golangci-lint run {{ARGS}} -- $(go work edit -json | jq -c -r '[.Use[].DiskPath] | map_values(. + "/...")[]')
 
 # Check struct memory alignment and print potential improvements
 [no-exit-message]

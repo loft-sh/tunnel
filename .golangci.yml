@@ -25,6 +25,7 @@ linters:
     - gomnd
     - gochecknoglobals
     - makezero
+    - gci
 
 linters-settings:
   gofmt:
@@ -146,6 +147,11 @@ linters-settings:
           - github.com/go-chi/chi
           - github.com/jba/muxpatterns
           - github.com/klauspost/compress/zstd
+          - github.com/metal-stack/go-ipam
+
+  gomoddirectives:
+    replace-allow-list:
+      - tailscale.com
 
 issues:
   # Maximum issues count per one linter. Set to 0 to disable. Default is 50.

@@ -1,13 +1,16 @@
 {
-	"cSpell.words": [
-		"controlhttp",
-		"Derp",
-		"muxpatterns",
-		"netmap",
-		"netutil",
-		"tailcfg",
-		"tailscale",
-		"tkey",
-		"zstd"
-	]
+  "cSpell.words": [
+    "controlhttp",
+    "Derp",
+    "muxpatterns",
+    "netmap",
+    "netutil",
+    "tailcfg",
+    "tailscale",
+    "tkey",
+    "zstd"
+  ],
+  "gopls": {
+    "formatting.gofumpt": true
+  }
 }

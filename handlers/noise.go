@@ -53,6 +53,7 @@ func CreatePeerHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 	r.MethodFunc(SetDNSMethod, SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
 	r.MethodFunc(HealthChangeMethod, HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
 	r.MethodFunc(IDTokenMethod, IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
+	r.MethodFunc(SSHActionMethod, SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
 
 	return r
 }

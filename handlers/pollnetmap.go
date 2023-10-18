@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -15,6 +16,8 @@ import (
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 )
+
+var ErrPollNetmapClosed = errors.New("poll netmap closed")
 
 const (
 	PollNetMapMethod        = http.MethodPost
@@ -59,7 +62,7 @@ func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey ke
 			}
 
 			if !more {
-				cancel(fmt.Errorf("poll netmap closed"))
+				cancel(ErrPollNetmapClosed)
 				return
 			}
 
