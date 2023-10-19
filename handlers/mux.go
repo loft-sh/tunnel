@@ -7,6 +7,8 @@ import (
 	"github.com/loft-sh/tunnel"
 )
 
+// CoordinatorHandler returns a http.Handler that handles all requests to the
+// coordinator, including the noise requests.
 func CoordinatorHandler(coordinator tunnel.TailscaleCoordinator) http.Handler {
 	mux := chi.NewMux()
 
