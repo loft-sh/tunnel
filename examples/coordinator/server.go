@@ -52,6 +52,11 @@ var (
 // Config is the configuration for the coordinator.
 // This is useful for running test scenarios with a pre-configured coordinator.
 type Config struct {
+	// HTTPListenAddr is the address that the coordinator will listen on.
+	//
+	// Defaults to ":3000".
+	HTTPListenAddr string `json:"httpListenAddr,omitempty"`
+
 	// ControlKey is the control key of the coordinator.
 	//
 	// Either this or ControlKeyLocation needs to be set.
@@ -106,6 +111,8 @@ type Config struct {
 		UserID tailcfg.UserID `json:"userId"`
 		// NodeID is the node id of the node.
 		NodeID tailcfg.NodeID `json:"nodeId"`
+		// IP is the IP of the node.
+		IP string `json:"ip,omitempty"`
 	} `json:"nodes,omitempty"`
 }
 
@@ -147,7 +154,13 @@ func main() {
 
 	r.Get("/nodes", NodeInfoHandler(coordinator))
 
-	if err := http.ListenAndServe(":3000", r); err != nil {
+	addr := ":3000"
+
+	if config.HTTPListenAddr != "" {
+		addr = config.HTTPListenAddr
+	}
+
+	if err := http.ListenAndServe(addr, r); err != nil {
 		panic(err)
 	}
 }
@@ -252,10 +265,20 @@ func NewTSCoordinator() *TSCoordinator {
 				panic(err)
 			}
 
+			var ip *goipam.IP
+
+			if node.IP != "" {
+				ip, err = ipam.AcquireSpecificIP(context.TODO(), prefix.Cidr, node.IP)
+				if err != nil {
+					panic(err)
+				}
+			}
+
 			coordinator.nodes[peerPublicKey] = TSNode{
 				UserID:        node.UserID,
 				NodeID:        node.NodeID,
 				NodePublicKey: nodeKey,
+				IP:            ip,
 			}
 		}
 	}

@@ -4,6 +4,9 @@
   "$defs": {
     "Config": {
       "properties": {
+        "httpListenAddr": {
+          "type": "string"
+        },
         "controlKey": {
           "$ref": "#/$defs/MachinePrivate"
         },
@@ -54,6 +57,9 @@
               },
               "nodeId": {
                 "type": "integer"
+              },
+              "ip": {
+                "type": "string"
               }
             },
             "additionalProperties": false,
