@@ -1,0 +1,155 @@
+project_name: tunnel
+
+before:
+  hooks:
+    - go mod tidy
+    - cd examples/coordinator/ && go mod tidy
+
+source:
+  enabled: false
+
+builds:
+  - env:
+      - GOWORK=off
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    binary: tscoordinator
+    dir: ./examples/coordinator/
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    builds_info:
+      group: root
+      owner: root
+    files: []
+
+sboms:
+  - artifacts: archive
+
+checksum:
+  name_template: "checksums.txt"
+
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes" # needed on cosign 2.0.0+
+    artifacts: checksum
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  abbrev: -1
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^[skip ci]"
+  groups:
+    - title: Features
+      regexp: '^.*?(?:feat|feature)(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?(?:bug|fix)(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Changes
+      order: 999
+
+release:
+  prerelease: auto
+  make_latest: false
+  replace_existing_draft: true
+
+dockers:
+  # --- Loft images ---
+  - image_templates:
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Version }}-amd64
+      - '{{ if eq .Prerelease "" }}ghcr.io/loft-sh/ts-coordinator-in-memory:latest-amd64{{ end }}'
+      - '{{ if eq .Prerelease "" }}ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Major }}.{{ .Minor }}-amd64{{ end }}'
+    use: buildx
+    goarch: amd64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - image_templates:
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Version }}-arm64v8
+      - '{{ if eq .Prerelease "" }}ghcr.io/loft-sh/ts-coordinator-in-memory:latest-arm64v8{{ end }}'
+      - '{{ if eq .Prerelease "" }}ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Major }}.{{ .Minor }}-arm64v8{{ end }}'
+    use: buildx
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64/v8"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+docker_manifests:
+  # --- Loft multi arch ---
+  - name_template: ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Version }}
+    image_templates:
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Version }}-amd64
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Version }}-arm64v8
+
+  - name_template: ghcr.io/loft-sh/ts-coordinator-in-memory:latest
+    image_templates:
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:latest-amd64
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:latest-arm64v8
+    skip_push: auto
+
+  - name_template: ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Major }}.{{ .Minor }}
+    image_templates:
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Major }}.{{ .Minor }}-amd64
+      - ghcr.io/loft-sh/ts-coordinator-in-memory:{{ .Major }}.{{ .Minor }}-arm64v8
+    skip_push: auto
+
+docker_signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    artifacts: all
+    args:
+      - "sign"
+      - "${artifact}"
+      - "--yes" # needed on cosign 2.0.0+

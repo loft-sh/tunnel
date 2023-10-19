@@ -44,8 +44,6 @@ var (
 
 var (
 	ErrMissingAuthKey      = errors.New("missing auth key")
-	ErrMissingControlKey   = errors.New("control key location not set")
-	ErrMissingLegacyKey    = errors.New("legacy control key location not set")
 	ErrMissingUserProfiles = errors.New("missing user profiles")
 )
 
@@ -251,35 +249,37 @@ func NewTSCoordinator() *TSCoordinator {
 		nodes: map[key.MachinePublic]TSNode{},
 	}
 
-	if config.Nodes != nil {
-		for _, node := range *config.Nodes {
-			nodeKey := key.NodePublic{}
-			err := nodeKey.UnmarshalText([]byte(node.NodeKey))
+	if config.Nodes == nil {
+		return coordinator
+	}
+
+	for _, node := range *config.Nodes {
+		nodeKey := key.NodePublic{}
+		err := nodeKey.UnmarshalText([]byte(node.NodeKey))
+		if err != nil {
+			panic(err)
+		}
+
+		peerPublicKey := key.MachinePublic{}
+		err = peerPublicKey.UnmarshalText([]byte(node.PeerPublicKey))
+		if err != nil {
+			panic(err)
+		}
+
+		var ip *goipam.IP
+
+		if node.IP != "" {
+			ip, err = ipam.AcquireSpecificIP(context.TODO(), prefix.Cidr, node.IP)
 			if err != nil {
 				panic(err)
 			}
+		}
 
-			peerPublicKey := key.MachinePublic{}
-			err = peerPublicKey.UnmarshalText([]byte(node.PeerPublicKey))
-			if err != nil {
-				panic(err)
-			}
-
-			var ip *goipam.IP
-
-			if node.IP != "" {
-				ip, err = ipam.AcquireSpecificIP(context.TODO(), prefix.Cidr, node.IP)
-				if err != nil {
-					panic(err)
-				}
-			}
-
-			coordinator.nodes[peerPublicKey] = TSNode{
-				UserID:        node.UserID,
-				NodeID:        node.NodeID,
-				NodePublicKey: nodeKey,
-				IP:            ip,
-			}
+		coordinator.nodes[peerPublicKey] = TSNode{
+			UserID:        node.UserID,
+			NodeID:        node.NodeID,
+			NodePublicKey: nodeKey,
+			IP:            ip,
 		}
 	}
 
@@ -740,7 +740,7 @@ func loadGlobalConfig() error {
 func readKeysIfNecessary() error {
 	if config.ControlKey == nil {
 		if config.ControlKeyLocation == "" {
-			return ErrMissingControlKey
+			config.ControlKeyLocation = "/tmp/control.key"
 		}
 
 		controlKey, err := readOrCreatePrivateKey(config.ControlKeyLocation)
@@ -752,7 +752,7 @@ func readKeysIfNecessary() error {
 
 	if config.LegacyControlKey == nil {
 		if config.LegacyControlKeyLocation == "" {
-			return ErrMissingLegacyKey
+			config.LegacyControlKeyLocation = "/tmp/legacy-control.key"
 		}
 
 		legacyControlKey, err := readOrCreatePrivateKey(config.LegacyControlKeyLocation)
