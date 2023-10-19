@@ -31,6 +31,9 @@ jobs:
           cache: false
           go-version-file: "go.mod"
 
+      - name: Setup Just
+        uses: extractions/setup-just@v1
+
       - name: Setup Cosgin
         uses: sigstore/cosign-installer@main
         with:

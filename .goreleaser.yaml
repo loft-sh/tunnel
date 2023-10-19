@@ -2,8 +2,7 @@ project_name: tunnel
 
 before:
   hooks:
-    - go mod tidy
-    - cd examples/coordinator/ && go mod tidy
+    - just tidy
 
 source:
   enabled: false

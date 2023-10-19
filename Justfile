@@ -21,3 +21,9 @@ lint *ARGS:
 [no-exit-message]
 check-structalign *ARGS:
   go run github.com/dkorunic/betteralign/cmd/betteralign@latest {{ARGS}} ./...
+
+# --- Go tooling ---
+
+tidy:
+  go mod tidy
+  cd examples/coordinator/ && go mod tidy
