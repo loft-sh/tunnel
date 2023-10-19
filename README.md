@@ -25,14 +25,14 @@ import (
   "net/http"
 
   "github.com/loft-sh/tunnel"
-  "github.com/loft-sh/tunnel/mux"
+  "github.com/loft-sh/tunnel/handlers"
 )
 
 func main() {
   coordinator := NewTSCoordinator()
 
   router := http.NewServeMux()
-  router.Handle("/", mux.CoordinatorHandler(coordinator))
+  router.Handle("/", handlers.CoordinatorHandler(coordinator))
 
   if err := http.ListenAndServe(":3000", router); err != nil {
     panic(err)

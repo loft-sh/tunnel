@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/Config",
+  "$defs": {
+    "Config": {
+      "properties": {
+        "controlKey": {
+          "$ref": "#/$defs/MachinePrivate"
+        },
+        "controlKeyLocation": {
+          "type": "string"
+        },
+        "legacyControlKey": {
+          "$ref": "#/$defs/MachinePrivate"
+        },
+        "legacyControlKeyLocation": {
+          "type": "string"
+        },
+        "baseDomain": {
+          "type": "string"
+        },
+        "cidr": {
+          "type": "string"
+        },
+        "keepAliveInterval": {
+          "type": "integer"
+        },
+        "derpMap": {
+          "$ref": "#/$defs/DERPMap"
+        },
+        "extraRecords": {
+          "items": {
+            "$ref": "#/$defs/DNSRecord"
+          },
+          "type": "array"
+        },
+        "userProfiles": {
+          "items": {
+            "$ref": "#/$defs/UserProfile"
+          },
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "properties": {
+              "nodeKey": {
+                "type": "string"
+              },
+              "peerPublicKey": {
+                "type": "string"
+              },
+              "userId": {
+                "type": "integer"
+              },
+              "nodeId": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "nodeKey",
+              "peerPublicKey",
+              "userId",
+              "nodeId"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "baseDomain",
+        "cidr",
+        "userProfiles"
+      ]
+    },
+    "DERPHomeParams": {
+      "properties": {
+        "RegionScore": {
+          "patternProperties": {
+            "^[0-9]+$": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "DERPMap": {
+      "properties": {
+        "HomeParams": {
+          "$ref": "#/$defs/DERPHomeParams"
+        },
+        "Regions": {
+          "patternProperties": {
+            "^[0-9]+$": {
+              "$ref": "#/$defs/DERPRegion"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "omitDefaultRegions": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "Regions"
+      ]
+    },
+    "DERPNode": {
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "RegionID": {
+          "type": "integer"
+        },
+        "HostName": {
+          "type": "string"
+        },
+        "CertName": {
+          "type": "string"
+        },
+        "IPv4": {
+          "type": "string"
+        },
+        "IPv6": {
+          "type": "string"
+        },
+        "STUNPort": {
+          "type": "integer"
+        },
+        "STUNOnly": {
+          "type": "boolean"
+        },
+        "DERPPort": {
+          "type": "integer"
+        },
+        "InsecureForTests": {
+          "type": "boolean"
+        },
+        "STUNTestIP": {
+          "type": "string"
+        },
+        "CanPort80": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "Name",
+        "RegionID",
+        "HostName"
+      ]
+    },
+    "DERPRegion": {
+      "properties": {
+        "RegionID": {
+          "type": "integer"
+        },
+        "RegionCode": {
+          "type": "string"
+        },
+        "RegionName": {
+          "type": "string"
+        },
+        "Avoid": {
+          "type": "boolean"
+        },
+        "Nodes": {
+          "items": {
+            "$ref": "#/$defs/DERPNode"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "RegionID",
+        "RegionCode",
+        "RegionName",
+        "Nodes"
+      ]
+    },
+    "DNSRecord": {
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        },
+        "Value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "Name",
+        "Value"
+      ]
+    },
+    "MachinePrivate": {
+      "properties": {},
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "UserProfile": {
+      "properties": {
+        "ID": {
+          "type": "integer"
+        },
+        "LoginName": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "ProfilePicURL": {
+          "type": "string"
+        },
+        "Roles": {
+          "$ref": "#/$defs/emptyStructJSONSlice"
+        },
+        "Groups": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "ID",
+        "LoginName",
+        "DisplayName",
+        "ProfilePicURL",
+        "Roles"
+      ]
+    },
+    "emptyStructJSONSlice": {
+      "properties": {},
+      "additionalProperties": false,
+      "type": "object"
+    }
+  }
+}

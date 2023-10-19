@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -15,35 +16,117 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/invopop/jsonschema"
 	"github.com/loft-sh/tunnel"
-	"github.com/loft-sh/tunnel/mux"
+	"github.com/loft-sh/tunnel/handlers"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 
 	goipam "github.com/metal-stack/go-ipam"
 )
 
-const (
-	baseDomain = "ts.loft"
-
-	// https://tailscale.com/kb/1015/100.cidr-addresses/
-	cidr = "100.64.0.0/10"
+var (
+	configFile         = flag.String("config", "", "config file to use")
+	generateSchemaOnly = flag.Bool("generate-schema-only", false, "generate schema only")
 )
 
 var (
 	ipam   goipam.Ipamer
 	prefix *goipam.Prefix
 
-	ErrMissingAuthKey = errors.New("missing auth key")
+	config Config
+
+	derpMap           = defaultDerpMap()
+	userProfiles      = defaultUserProfiles()
+	extraRecords      = []tailcfg.DNSRecord{}
+	keepAliveInterval = 60 * time.Second
 )
 
+var (
+	ErrMissingAuthKey      = errors.New("missing auth key")
+	ErrMissingControlKey   = errors.New("control key location not set")
+	ErrMissingLegacyKey    = errors.New("legacy control key location not set")
+	ErrMissingUserProfiles = errors.New("missing user profiles")
+)
+
+// Config is the configuration for the coordinator.
+// This is useful for running test scenarios with a pre-configured coordinator.
+type Config struct {
+	// ControlKey is the control key of the coordinator.
+	//
+	// Either this or ControlKeyLocation needs to be set.
+	ControlKey *key.MachinePrivate `json:"controlKey,omitempty"`
+	// ControlKeyLocation is the location of the control key on disk.
+	//
+	// Either this or ControlKey needs to be set.
+	ControlKeyLocation string `json:"controlKeyLocation,omitempty"`
+	// LegacyControlKey is the legacy control key of the coordinator.
+	//
+	// Either this or LegacyControlKeyLocation needs to be set.
+	LegacyControlKey *key.MachinePrivate `json:"legacyControlKey,omitempty"`
+	// LegacyControlKeyLocation is the location of the legacy control key on
+	// disk.
+	//
+	// Either this or LegacyControlKey needs to be set.
+	LegacyControlKeyLocation string `json:"legacyControlKeyLocation,omitempty"`
+	// BaseDomain is the base domain of the coordinator. This is also known as
+	// tailnet
+	BaseDomain string `json:"baseDomain"`
+	// CIDR is the CIDR of the tailnet.
+	CIDR string `json:"cidr"`
+	// KeepAliveInterval is the keep alive interval of the coordinator.
+	//
+	// This is the interval in which the coordinator will send keep alive
+	// messages to the nodes. It will also be reused as the interval for the
+	// cleanup goroutine that removes nodes that have disconnected.
+	//
+	// Defaults to 60 seconds.
+	KeepAliveInterval time.Duration `json:"keepAliveInterval,omitempty"`
+	// DerpMap is the DERP map that the coordinator will include in the
+	// MapResponse.
+	DerpMap *tailcfg.DERPMap `json:"derpMap,omitempty"`
+	// ExtraRecords is a list of extra DNS records that the coordinator will
+	// include in the MapResponse.
+	ExtraRecords *[]tailcfg.DNSRecord `json:"extraRecords,omitempty"`
+	// UserProfiles is a list of user profiles that the coordinator will
+	// include in the MapResponse.
+	UserProfiles *[]tailcfg.UserProfile `json:"userProfiles"`
+
+	// Nodes is a list of nodes that the coordinator will pre-populate in its
+	// internal node list.
+	//
+	// Nodes that are included here will not be required to perform
+	// authentication with the coordinator.
+	Nodes *[]struct {
+		// NodeKey is the node key of the node.
+		NodeKey string `json:"nodeKey"`
+		// PeerPublicKey is the peer public key of the node.
+		PeerPublicKey string `json:"peerPublicKey"`
+		// UserID is the user id of the node.
+		UserID tailcfg.UserID `json:"userId"`
+		// NodeID is the node id of the node.
+		NodeID tailcfg.NodeID `json:"nodeId"`
+	} `json:"nodes,omitempty"`
+}
+
 func main() {
+	flag.Parse()
+
+	if *generateSchemaOnly {
+		generateSchema()
+		return
+	}
+
+	if err := loadGlobalConfig(); err != nil {
+		panic(err)
+	}
+
 	ctx := context.TODO()
 
 	ipam = goipam.New(ctx)
 
 	var err error
-	prefix, err = ipam.NewPrefix(ctx, cidr)
+	prefix, err = ipam.NewPrefix(ctx, config.CIDR)
 	if err != nil {
 		panic(err)
 	}
@@ -60,16 +143,38 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	coordinator := NewTSCoordinator()
-	r.Handle("/*", mux.CoordinatorHandler(coordinator))
+	r.Handle("/*", handlers.CoordinatorHandler(coordinator))
 
-	r.Get("/nodes", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/nodes", NodeInfoHandler(coordinator))
+
+	if err := http.ListenAndServe(":3000", r); err != nil {
+		panic(err)
+	}
+}
+
+// NodeInfoHandler returns a list of all nodes that are connected to the
+// coordinator.
+func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		nodes := []string{}
+		type nodeInfo struct {
+			NodeID     tailcfg.NodeID `json:"nodeId"`
+			UserID     tailcfg.UserID `json:"userId"`
+			MachineKey string         `json:"machineKey"`
+			NodeKey    string         `json:"nodeKey"`
+		}
+
+		nodes := []nodeInfo{}
 
 		coordinator.nodeMutex.Lock()
-		for k := range coordinator.nodes {
-			nodes = append(nodes, k)
+		for k, v := range coordinator.nodes {
+			nodes = append(nodes, nodeInfo{
+				NodeID:     v.NodeID,
+				UserID:     v.UserID,
+				NodeKey:    v.NodePublicKey.String(),
+				MachineKey: k.String(),
+			})
 		}
 		coordinator.nodeMutex.Unlock()
 
@@ -78,62 +183,89 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
 		}
-	})
-
-	if err := http.ListenAndServe(":3000", r); err != nil {
-		panic(err)
 	}
 }
 
 // -- Tailscale Coordinator --
 
+// TSNode is a node that is connected to the coordinator.
+// It contains all the information that is needed to stream a MapResponse to the
+// node.
 type TSNode struct {
+	// Done is the context done channel for the streaming request. This channel
+	// is closed when the request is canceled.
 	Done <-chan struct{}
 
-	MapRequest      *tailcfg.MapRequest
-	RegisterRequest *tailcfg.RegisterRequest
+	// NodePublicKey is the node public key of the node. This is used as a
+	// "sessions" key for the node.
+	NodePublicKey key.NodePublic
 
+	// MapRequest is the map request of the node.
+	MapRequest *tailcfg.MapRequest
+
+	// UserID is the user id of the node.
 	UserID tailcfg.UserID
-	Node   *tailcfg.Node
-
+	// NodeID is the node id of the node.
 	NodeID tailcfg.NodeID
+	// Node is the node of the node.
+	Node *tailcfg.Node
 
+	// NetMapChan is channel that streams MapResponse to the node. Closing this
+	// channel will cause the connection to be closed.
 	NetMapChan chan tailcfg.MapResponse
-	ErrChan    chan error
+	// ErrChan is the error response channel for the node. It will forward an
+	// API error message to the peer and close the connection
+	ErrChan chan error
 
+	// IP is the IP of the node.
 	IP *goipam.IP
+
+	// RemovalTimer is the timer that will remove the node from the coordinator.
+	// This is used to cleanup nodes that have disconnected, if they have not
+	// reconnected within the keep alive interval.
+	RemovalTimer *time.Timer
 }
 
+// TSCoordinator is a Tailscale coordinator.
 type TSCoordinator struct {
-	controlKey       key.MachinePrivate
-	legacyControlKey key.MachinePrivate
-
 	nodeMutex sync.Mutex
-	nodes     map[string]TSNode
+	nodes     map[key.MachinePublic]TSNode
+}
+
+// NewTSCoordinator creates a new Tailscale coordinator.
+func NewTSCoordinator() *TSCoordinator {
+	coordinator := &TSCoordinator{
+		nodes: map[key.MachinePublic]TSNode{},
+	}
+
+	if config.Nodes != nil {
+		for _, node := range *config.Nodes {
+			nodeKey := key.NodePublic{}
+			err := nodeKey.UnmarshalText([]byte(node.NodeKey))
+			if err != nil {
+				panic(err)
+			}
+
+			peerPublicKey := key.MachinePublic{}
+			err = peerPublicKey.UnmarshalText([]byte(node.PeerPublicKey))
+			if err != nil {
+				panic(err)
+			}
+
+			coordinator.nodes[peerPublicKey] = TSNode{
+				UserID:        node.UserID,
+				NodeID:        node.NodeID,
+				NodePublicKey: nodeKey,
+			}
+		}
+	}
+
+	return coordinator
 }
 
 // SSHAction implements tunnel.TailscaleCoordinator.
 func (*TSCoordinator) SSHAction(r *http.Request, peerPublicKey key.MachinePublic) (tailcfg.SSHAction, error) {
 	panic("unimplemented")
-}
-
-func NewTSCoordinator() *TSCoordinator {
-	controlKey, err := readOrCreatePrivateKey("tmp/control.key")
-	if err != nil {
-		panic(err)
-	}
-
-	legacyControlKey, err := readOrCreatePrivateKey("tmp/legacy.key")
-	if err != nil {
-		panic(err)
-	}
-
-	return &TSCoordinator{
-		controlKey:       *controlKey,
-		legacyControlKey: *legacyControlKey,
-		nodeMutex:        sync.Mutex{},
-		nodes:            make(map[string]TSNode),
-	}
 }
 
 // HealthChange implements tunnel.TailscaleCoordinator.
@@ -153,41 +285,22 @@ func (*TSCoordinator) SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.Machin
 
 // DerpMap implements tunnel.TailscaleCoordinator.
 func (*TSCoordinator) DerpMap() (tailcfg.DERPMap, error) {
-	return tailcfg.DERPMap{
-		Regions: map[int]*tailcfg.DERPRegion{
-			900: {
-				RegionID:   900,
-				RegionCode: "loft",
-				RegionName: "Embedded Loft DERP",
-				Avoid:      false,
-				Nodes: []*tailcfg.DERPNode{
-					{
-						Name:     "Embedded Loft DERP",
-						RegionID: 900,
-						HostName: "localhost",
-						IPv4:     "127.0.0.1",
-						DERPPort: 3340,
-					},
-				},
-			},
-		},
-		OmitDefaultRegions: true,
-	}, nil
+	return derpMap, nil
 }
 
 // ControlKey implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) ControlKey() key.MachinePrivate {
-	return t.controlKey
+	return *config.ControlKey
 }
 
 // LegacyControlKey implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) LegacyControlKey() key.MachinePrivate {
-	return t.legacyControlKey
+	return *config.LegacyControlKey
 }
 
 // KeepAliveInterval implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) KeepAliveInterval() time.Duration {
-	return 60 * time.Second
+	return keepAliveInterval
 }
 
 // PollNetMap implements tunnel.TailscaleCoordinator.
@@ -198,13 +311,18 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 	t.nodeMutex.Lock()
 	defer t.nodeMutex.Unlock()
 
-	if _, ok := t.nodes[req.NodeKey.String()]; !ok {
+	if _, ok := t.nodes[peerPublicKey]; !ok {
 		//nolint:goerr113
-		go func() { errChan <- fmt.Errorf("node %v not registered", req.NodeKey.String()) }()
+		go func() { errChan <- fmt.Errorf("node %v not registered", peerPublicKey) }()
 		return resChan, errChan
 	}
 
-	node := t.nodes[req.NodeKey.String()]
+	node := t.nodes[peerPublicKey]
+
+	if node.RemovalTimer != nil {
+		node.RemovalTimer.Stop()
+		node.RemovalTimer = nil
+	}
 
 	if req.Stream {
 		node.Done = ctx.Done()
@@ -223,11 +341,11 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 		}
 	}
 
-	t.nodes[req.NodeKey.String()] = node
+	t.nodes[peerPublicKey] = node
 
 	// Cleanup goroutine on streaming request
 	if req.Stream {
-		go cleanup(ctx, t, req, node)
+		go t.cleanupDisconnectedNode(ctx, peerPublicKey, node)
 	}
 
 	go t.handleNetMapRequest(resChan, errChan, req, peerPublicKey, node.IP)
@@ -235,22 +353,16 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 	return resChan, errChan
 }
 
+// DNSConfig implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) DNSConfig() *tailcfg.DNSConfig {
 	return &tailcfg.DNSConfig{
-		Proxied: true,
-
-		Domains: []string{baseDomain},
-
-		ExtraRecords: []tailcfg.DNSRecord{
-			{
-				Name:  fmt.Sprintf("aa.%s", baseDomain),
-				Type:  "A",
-				Value: "100.200.0.1",
-			},
-		},
+		Proxied:      true,
+		Domains:      []string{config.BaseDomain},
+		ExtraRecords: extraRecords,
 	}
 }
 
+// handleNetMapRequest handles a netmap request.
 func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, ip *goipam.IP) {
 	derpMap, err := t.DerpMap()
 	if err != nil {
@@ -271,16 +383,16 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 
 	t.nodeMutex.Lock()
 
-	coordinatorNodeInfo := t.nodes[req.NodeKey.String()]
+	coordinatorNodeInfo := t.nodes[peerPublicKey]
 	node := t.getNode(req, coordinatorNodeInfo, peerPublicKey, prefix, &now, &online)
 	coordinatorNodeInfo.Node = &node
-	t.nodes[req.NodeKey.String()] = coordinatorNodeInfo
+	t.nodes[peerPublicKey] = coordinatorNodeInfo
 
 	peers := t.peersForNode(req, node)
 
 	t.nodeMutex.Unlock()
 
-	userProfiles := t.userProfiles(node)
+	userProfiles := userProfiles
 
 	response := tailcfg.MapResponse{
 		MapSessionHandle: req.MapSessionHandle,
@@ -288,25 +400,19 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 		ControlTime:      &now,
 		Node:             &node,
 		DERPMap:          &derpMap,
-		Domain:           baseDomain,
+		Domain:           config.BaseDomain,
 		Peers:            peers,
 		UserProfiles:     userProfiles,
 		DNSConfig:        dnsConfig,
 	}
 
-	if req.OmitPeers {
-		response.Peers = nil
-		response.PeersChanged = nil
-		response.PeersRemoved = nil
-		response.PeersChangedPatch = nil
-	}
-
 	resChan <- response
 
+	//nolint:godox
 	// TODO(ThomasK33): This needs to get debounced, as clients might send
 	// updates in a very quick succession, which would result in a lot of
-	// unnecessary updates.
-	t.handleNewPeerChange(node)
+	// unnecessary updates/noise.
+	t.announcePeerChange(node)
 
 	if !req.Stream {
 		close(resChan)
@@ -314,36 +420,7 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 	}
 }
 
-func (*TSCoordinator) userProfiles(node tailcfg.Node) []tailcfg.UserProfile {
-	userProfiles := []tailcfg.UserProfile{
-		{
-			ID:            node.User,
-			LoginName:     "thomas.kosiewski@loft.sh",
-			DisplayName:   "Thomas Kosiewski",
-			ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
-		},
-		{
-			ID:            100,
-			LoginName:     "thomas.kosiewski@loft.sh",
-			DisplayName:   "Thomas Kosiewski (100)",
-			ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
-		},
-		{
-			ID:            123,
-			LoginName:     "thomas.kosiewski@loft.sh",
-			DisplayName:   "Thomas Kosiewski (123)",
-			ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
-		},
-		{
-			ID:            200,
-			LoginName:     "thomas.kosiewski@loft.sh",
-			DisplayName:   "Thomas Kosiewski (200)",
-			ProfilePicURL: "https://lh3.google.com/u/0/ogw/AKPQZvwLeFOV6cJ_JLcLdfeiy5JFzqbSrjvwpuBs4GfZ=s64-c-mo",
-		},
-	}
-	return userProfiles
-}
-
+// peersForNode returns a list of peers for a given node.
 func (t *TSCoordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) []*tailcfg.Node {
 	peers := []*tailcfg.Node{}
 
@@ -364,6 +441,7 @@ func (t *TSCoordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) 
 	return peers
 }
 
+// getNode returns a node for a given request.
 func (*TSCoordinator) getNode(req tailcfg.MapRequest, coordinatorNodeInfo TSNode, peerPublicKey key.MachinePublic, addresses netip.Prefix, lastSeen *time.Time, online *bool) tailcfg.Node {
 	node := tailcfg.Node{
 		Addresses:         []netip.Prefix{addresses},
@@ -376,7 +454,7 @@ func (*TSCoordinator) getNode(req tailcfg.MapRequest, coordinatorNodeInfo TSNode
 		LastSeen:          lastSeen,
 		Machine:           peerPublicKey,
 		MachineAuthorized: true,
-		Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), baseDomain),
+		Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), config.BaseDomain),
 		Online:            online,
 		StableID:          tailcfg.StableNodeID(fmt.Sprintf("stable-%v", coordinatorNodeInfo.NodeID)),
 		User:              coordinatorNodeInfo.UserID,
@@ -388,20 +466,40 @@ func (*TSCoordinator) getNode(req tailcfg.MapRequest, coordinatorNodeInfo TSNode
 	return node
 }
 
-func cleanup(ctx context.Context, t *TSCoordinator, req tailcfg.MapRequest, node TSNode) {
+// cleanupDisconnectedNode cleans up a node that has disconnected from the
+// coordinator.
+func (t *TSCoordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicKey key.MachinePublic, node TSNode) {
 	<-ctx.Done()
 
-	t.nodeMutex.Lock()
-	nodeID := t.nodes[req.NodeKey.String()].NodeID
-	delete(t.nodes, req.NodeKey.String())
-	t.nodeMutex.Unlock()
+	online := false
+	now := time.Now()
 
-	t.handlePeersRemoved(nodeID)
+	if node.Node != nil {
+		node.Node.Online = &online
+		node.Node.LastSeen = &now
+	}
 
-	_, _ = ipam.ReleaseIP(ctx, node.IP)
+	if node.RemovalTimer != nil {
+		node.RemovalTimer.Stop()
+	}
+	node.RemovalTimer = time.AfterFunc(keepAliveInterval, func() {
+		if node.IP != nil {
+			_, _ = ipam.ReleaseIP(context.Background(), node.IP)
+		}
+
+		t.nodeMutex.Lock()
+		delete(t.nodes, peerPublicKey)
+		t.nodeMutex.Unlock()
+
+		t.announcePeerDisconnected(node.NodeID, true)
+	})
+
+	t.announcePeerDisconnected(node.NodeID, false)
 }
 
-func (t *TSCoordinator) handleNewPeerChange(newNode tailcfg.Node) {
+// announcePeerChange announces a peer change to all nodes that are connected to
+// the coordinator.
+func (t *TSCoordinator) announcePeerChange(newNode tailcfg.Node) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
 		if node.Node == nil || node.Node.ID == newNode.ID {
@@ -438,7 +536,10 @@ func (t *TSCoordinator) handleNewPeerChange(newNode tailcfg.Node) {
 	t.nodeMutex.Unlock()
 }
 
-func (t *TSCoordinator) handlePeersRemoved(nodeID tailcfg.NodeID) {
+// announcePeerDisconnected announces a peer disconnect to all nodes that are
+// connected to the coordinator. If `remove` is set to true, the node will be
+// removed from each node's peer list.
+func (t *TSCoordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove bool) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
 		if node.NodeID == nodeID {
@@ -453,9 +554,12 @@ func (t *TSCoordinator) handlePeersRemoved(nodeID tailcfg.NodeID) {
 			MapSessionHandle: node.MapRequest.MapSessionHandle,
 			Seq:              node.MapRequest.MapSessionSeq + 1,
 
-			PeersRemoved:   []tailcfg.NodeID{nodeID},
 			PeerSeenChange: map[tailcfg.NodeID]bool{nodeID: false},
 			OnlineChange:   map[tailcfg.NodeID]bool{nodeID: false},
+		}
+
+		if remove {
+			res.PeersRemoved = []tailcfg.NodeID{nodeID}
 		}
 
 		select {
@@ -469,25 +573,39 @@ func (t *TSCoordinator) handlePeersRemoved(nodeID tailcfg.NodeID) {
 
 // RegisterMachine implements tunnel.TailscaleCoordinator.
 func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
-	if req.Auth.AuthKey == "" {
-		return tailcfg.RegisterResponse{}, ErrMissingAuthKey
+	// If we already have a node configured with the nodeKey and peerPublicKey,
+	// we should return the same nodeID and userID as before and omit any kind
+	// of authentication, as this was already done before.
+	t.nodeMutex.Lock()
+	node, ok := t.nodes[peerPublicKey]
+	t.nodeMutex.Unlock()
+
+	var userID int64
+
+	if ok {
+		userID = int64(node.UserID)
+	} else {
+		var err error
+		node, err = t.authenticateMachine(req, peerPublicKey)
+		if err != nil {
+			return tailcfg.RegisterResponse{}, fmt.Errorf("failed to authenticate machine: %w", err)
+		}
+		userID = int64(node.UserID)
 	}
 
-	userID, err := strconv.ParseInt(req.Auth.AuthKey, 10, 64)
-	if err != nil {
-		return tailcfg.RegisterResponse{}, fmt.Errorf("failed to parse auth key: %w", err)
+	// Check for "1970-01-01T01:02:03+01:00" (123 seconds since unix zero
+	// timestamp) as that means that a node has purposefully logged out.
+	if req.Expiry.Unix() == 123 {
+		t.nodeMutex.Lock()
+		if node.IP != nil {
+			_, _ = ipam.ReleaseIP(context.TODO(), node.IP)
+		}
+		delete(t.nodes, peerPublicKey)
+		t.nodeMutex.Unlock()
+		t.announcePeerDisconnected(node.NodeID, true)
+
+		return tailcfg.RegisterResponse{}, nil
 	}
-
-	// TODO(ThomasK33): Check for "1970-01-01T01:02:03+01:00" as that means that
-	// a node has purposefully logged out
-
-	// if req.Expiry.Equal(time.UnixMicro(0)) {
-	// 	t.nodeMutex.Lock()
-	// 	delete(t.nodes, req.NodeKey.String())
-	// 	t.nodeMutex.Unlock()
-
-	// 	return tailcfg.RegisterResponse{}, errors.New("node has logged out")
-	// }
 
 	res := tailcfg.RegisterResponse{
 		MachineAuthorized: true,
@@ -502,21 +620,169 @@ func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicK
 		},
 	}
 
-	t.nodeMutex.Lock()
-	t.nodes[req.NodeKey.String()] = TSNode{
-		UserID:          tailcfg.UserID(userID),
-		RegisterRequest: &req,
-		NodeID:          tailcfg.NodeID(len(t.nodes) + 1),
-	}
-	t.nodeMutex.Unlock()
-
 	return res, nil
 }
 
+// authenticateMachine authenticates a machine and returns the node that is
+// associated with the machine.
+func (t *TSCoordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (TSNode, error) {
+	if req.Auth.AuthKey == "" {
+		return TSNode{}, ErrMissingAuthKey
+	}
+
+	userID, err := strconv.ParseInt(req.Auth.AuthKey, 10, 64)
+	if err != nil {
+		return TSNode{}, fmt.Errorf("failed to parse auth key: %w", err)
+	}
+
+	profileFound := false
+
+	for _, profile := range userProfiles {
+		if profile.ID == tailcfg.UserID(userID) {
+			profileFound = true
+			break
+		}
+	}
+
+	if !profileFound {
+		//nolint:goerr113
+		return TSNode{}, fmt.Errorf("user profile with id %v not found", userID)
+	}
+
+	t.nodeMutex.Lock()
+	node := TSNode{
+		UserID:        tailcfg.UserID(userID),
+		NodeID:        tailcfg.NodeID(len(t.nodes) + 1),
+		NodePublicKey: req.NodeKey,
+	}
+	t.nodes[peerPublicKey] = node
+	t.nodeMutex.Unlock()
+
+	return node, nil
+}
+
+// TSCoordinator implements tunnel.TailscaleCoordinator.
 var _ tunnel.TailscaleCoordinator = (*TSCoordinator)(nil)
 
 // --- Utils ---
 
+//nolint:cyclop
+func loadGlobalConfig() error {
+	if configFile != nil && *configFile != "" {
+		content, err := os.ReadFile(*configFile)
+		if err != nil {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+
+		err = json.Unmarshal(content, &config)
+		if err != nil {
+			return fmt.Errorf("failed to parse config file: %w", err)
+		}
+	}
+
+	if err := readKeysIfNecessary(); err != nil {
+		return fmt.Errorf("failed to read keys: %w", err)
+	}
+
+	if config.BaseDomain == "" {
+		config.BaseDomain = "ts.loft"
+	}
+
+	if config.CIDR == "" {
+		// https://tailscale.com/kb/1015/100.cidr-addresses/
+		config.CIDR = "100.64.0.0/10"
+	}
+
+	if config.DerpMap != nil {
+		derpMap = *config.DerpMap
+	}
+
+	if config.KeepAliveInterval != 0 {
+		keepAliveInterval = config.KeepAliveInterval
+	}
+
+	if config.UserProfiles != nil {
+		userProfiles = *config.UserProfiles
+	}
+
+	if config.ExtraRecords != nil {
+		extraRecords = *config.ExtraRecords
+	}
+
+	return nil
+}
+
+// readKeysIfNecessary reads the control key and legacy control key from disk,
+// if they are not already set.
+func readKeysIfNecessary() error {
+	if config.ControlKey == nil {
+		if config.ControlKeyLocation == "" {
+			return ErrMissingControlKey
+		}
+
+		controlKey, err := readOrCreatePrivateKey(config.ControlKeyLocation)
+		if err != nil {
+			return fmt.Errorf("failed to read control key: %w", err)
+		}
+		config.ControlKey = controlKey
+	}
+
+	if config.LegacyControlKey == nil {
+		if config.LegacyControlKeyLocation == "" {
+			return ErrMissingLegacyKey
+		}
+
+		legacyControlKey, err := readOrCreatePrivateKey(config.LegacyControlKeyLocation)
+		if err != nil {
+			return fmt.Errorf("failed to read legacy control key: %w", err)
+		}
+		config.LegacyControlKey = legacyControlKey
+	}
+
+	return nil
+}
+
+// defaultDerpMap returns a default DERP map that is used if no DERP map is
+// configured.
+func defaultDerpMap() tailcfg.DERPMap {
+	return tailcfg.DERPMap{
+		Regions: map[int]*tailcfg.DERPRegion{
+			900: {
+				RegionID:   900,
+				RegionCode: "loft",
+				RegionName: "Embedded Loft DERP",
+				Avoid:      false,
+				Nodes: []*tailcfg.DERPNode{
+					{
+						Name:     "Embedded Loft DERP",
+						RegionID: 900,
+						HostName: "localhost",
+						IPv4:     "127.0.0.1",
+						DERPPort: 3340,
+					},
+				},
+			},
+		},
+		OmitDefaultRegions: true,
+	}
+}
+
+// defaultUserProfiles returns a default list of user profiles that is used if
+// no user profiles are configured.
+func defaultUserProfiles() []tailcfg.UserProfile {
+	return []tailcfg.UserProfile{
+		{
+			ID:            100,
+			LoginName:     "test",
+			DisplayName:   "Test User",
+			ProfilePicURL: "https://avatars.githubusercontent.com/u/0?v=4",
+			Groups:        []string{"admins"},
+		},
+	}
+}
+
+// readOrCreatePrivateKey reads a private key from disk or creates a new one if
+// it does not exist.
 func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
 	privateKey, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -556,4 +822,14 @@ func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
 	}
 
 	return &machineKey, nil
+}
+
+// generateSchema generates the JSON schema for the config struct.
+func generateSchema() {
+	schema := jsonschema.Reflect(&Config{})
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(schema); err != nil {
+		panic(err)
+	}
 }

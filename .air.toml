@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-args_bin = []
+args_bin = ["-config", "examples/coordinator/config.json"]
 bin = "./tmp/main"
 cmd = "go build -o ./tmp/main examples/coordinator/server.go"
 delay = 0
@@ -14,8 +14,8 @@ exclude_unchanged = false
 follow_symlink = false
 full_bin = ""
 include_dir = []
-include_ext = ["go", "tpl", "tmpl", "html"]
-include_file = []
+include_ext = ["go", "tpl", "tmpl", "html", "json"]
+include_file = ["examples/coordinator/config.json"]
 kill_delay = "0s"
 log = "build-errors.log"
 poll = false

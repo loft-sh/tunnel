@@ -10,7 +10,16 @@
     "tkey",
     "zstd"
   ],
+  "go.useLanguageServer": true,
   "gopls": {
     "formatting.gofumpt": true
-  }
+  },
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "/*config.json"
+      ],
+      "url": "./examples/coordinator/schema.json"
+    }
+  ]
 }

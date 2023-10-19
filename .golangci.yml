@@ -148,6 +148,7 @@ linters-settings:
           - github.com/jba/muxpatterns
           - github.com/klauspost/compress/zstd
           - github.com/metal-stack/go-ipam
+          - github.com/invopop/jsonschema
 
   gomoddirectives:
     replace-allow-list:
