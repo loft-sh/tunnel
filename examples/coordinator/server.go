@@ -101,10 +101,13 @@ type Config struct {
 	// Nodes that are included here will not be required to perform
 	// authentication with the coordinator.
 	Nodes *[]struct {
+		// Name is the FQDN of the node. It is also the MagicDNS name for the
+		// node. It has a trailing dot. e.g. "host.tail-scale.ts.net."
+		Name string `json:"name"`
 		// NodeKey is the node key of the node.
-		NodeKey string `json:"nodeKey"`
-		// PeerPublicKey is the peer public key of the node.
-		PeerPublicKey string `json:"peerPublicKey"`
+		NodeKey string `json:"nodeKey,omitempty"`
+		// MachineKey is the peer public key of the node.
+		MachineKey string `json:"machineKey"`
 		// UserID is the user id of the node.
 		UserID tailcfg.UserID `json:"userId"`
 		// NodeID is the node id of the node.
@@ -181,9 +184,9 @@ func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *
 		coordinator.nodeMutex.Lock()
 		for k, v := range coordinator.nodes {
 			nodes = append(nodes, nodeInfo{
-				NodeID:     v.NodeID,
-				UserID:     v.UserID,
-				NodeKey:    v.NodePublicKey.String(),
+				NodeID:     v.Node.ID,
+				UserID:     v.Node.User,
+				NodeKey:    v.Node.Key.String(),
 				MachineKey: k.String(),
 			})
 		}
@@ -206,21 +209,6 @@ type TSNode struct {
 	// Done is the context done channel for the streaming request. This channel
 	// is closed when the request is canceled.
 	Done <-chan struct{}
-
-	// NodePublicKey is the node public key of the node. This is used as a
-	// "sessions" key for the node.
-	NodePublicKey key.NodePublic
-
-	// MapRequest is the map request of the node.
-	MapRequest *tailcfg.MapRequest
-
-	// UserID is the user id of the node.
-	UserID tailcfg.UserID
-	// NodeID is the node id of the node.
-	NodeID tailcfg.NodeID
-	// Node is the node of the node.
-	Node *tailcfg.Node
-
 	// NetMapChan is channel that streams MapResponse to the node. Closing this
 	// channel will cause the connection to be closed.
 	NetMapChan chan tailcfg.MapResponse
@@ -228,8 +216,10 @@ type TSNode struct {
 	// API error message to the peer and close the connection
 	ErrChan chan error
 
-	// IP is the IP of the node.
-	IP *goipam.IP
+	// MapRequest is the map request of the node.
+	MapRequest tailcfg.MapRequest
+	// Node is the node of the node.
+	Node tailcfg.Node
 
 	// RemovalTimer is the timer that will remove the node from the coordinator.
 	// This is used to cleanup nodes that have disconnected, if they have not
@@ -261,7 +251,7 @@ func NewTSCoordinator() *TSCoordinator {
 		}
 
 		peerPublicKey := key.MachinePublic{}
-		err = peerPublicKey.UnmarshalText([]byte(node.PeerPublicKey))
+		err = peerPublicKey.UnmarshalText([]byte(node.MachineKey))
 		if err != nil {
 			panic(err)
 		}
@@ -275,11 +265,20 @@ func NewTSCoordinator() *TSCoordinator {
 			}
 		}
 
+		prefix, err := ip.IP.Prefix(32)
+		if err != nil {
+			panic(err)
+		}
+
 		coordinator.nodes[peerPublicKey] = TSNode{
-			UserID:        node.UserID,
-			NodeID:        node.NodeID,
-			NodePublicKey: nodeKey,
-			IP:            ip,
+			Node: tailcfg.Node{
+				ID:         node.NodeID,
+				User:       node.UserID,
+				Key:        nodeKey,
+				Name:       node.Name,
+				Addresses:  []netip.Prefix{prefix},
+				AllowedIPs: []netip.Prefix{prefix},
+			},
 		}
 	}
 
@@ -349,19 +348,26 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 
 	if req.Stream {
 		node.Done = ctx.Done()
-		node.MapRequest = &req
+		node.MapRequest = req
 		node.NetMapChan = resChan
 		node.ErrChan = errChan
 	}
 
-	var err error
-
-	if node.IP == nil {
-		node.IP, err = ipam.AcquireIP(ctx, prefix.Cidr)
+	if len(node.Node.Addresses) == 0 {
+		ip, err := ipam.AcquireIP(ctx, prefix.Cidr)
 		if err != nil {
 			go func() { errChan <- err }()
 			return resChan, errChan
 		}
+
+		prefix, err := ip.IP.Prefix(32)
+		if err != nil {
+			go func() { errChan <- err }()
+			return resChan, errChan
+		}
+
+		node.Node.Addresses = []netip.Prefix{prefix}
+		node.Node.AllowedIPs = []netip.Prefix{prefix}
 	}
 
 	t.nodes[peerPublicKey] = node
@@ -371,7 +377,7 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 		go t.cleanupDisconnectedNode(ctx, peerPublicKey, node)
 	}
 
-	go t.handleNetMapRequest(resChan, errChan, req, peerPublicKey, node.IP)
+	go t.handleNetMapRequest(resChan, errChan, req, peerPublicKey, &node.Node)
 
 	return resChan, errChan
 }
@@ -386,7 +392,7 @@ func (t *TSCoordinator) DNSConfig() *tailcfg.DNSConfig {
 }
 
 // handleNetMapRequest handles a netmap request.
-func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, ip *goipam.IP) {
+func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, node *tailcfg.Node) {
 	derpMap, err := t.DerpMap()
 	if err != nil {
 		errChan <- err
@@ -395,25 +401,24 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 
 	now := time.Now()
 	online := true
-
 	dnsConfig := t.DNSConfig()
 
-	prefix, err := ip.IP.Prefix(32)
-	if err != nil {
-		errChan <- err
-		return
+	node.DiscoKey = req.DiscoKey
+	node.Endpoints = req.Endpoints
+	node.Hostinfo = req.Hostinfo.View()
+	node.Key = req.NodeKey
+	node.LastSeen = &now
+	node.Machine = peerPublicKey
+	node.MachineAuthorized = true
+	node.Name = fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), config.BaseDomain)
+	node.Online = &online
+	node.StableID = tailcfg.StableNodeID(fmt.Sprintf("stable-%v", node.ID))
+
+	if req.Hostinfo.NetInfo != nil {
+		node.DERP = fmt.Sprintf("127.3.3.40:%v", req.Hostinfo.NetInfo.PreferredDERP)
 	}
 
-	t.nodeMutex.Lock()
-
-	coordinatorNodeInfo := t.nodes[peerPublicKey]
-	node := t.getNode(req, coordinatorNodeInfo, peerPublicKey, prefix, &now, &online)
-	coordinatorNodeInfo.Node = &node
-	t.nodes[peerPublicKey] = coordinatorNodeInfo
-
-	peers := t.peersForNode(req, node)
-
-	t.nodeMutex.Unlock()
+	peers := t.peersForNode(req, *node)
 
 	userProfiles := userProfiles
 
@@ -421,7 +426,7 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 		MapSessionHandle: req.MapSessionHandle,
 		Seq:              req.MapSessionSeq + 1,
 		ControlTime:      &now,
-		Node:             &node,
+		Node:             node,
 		DERPMap:          &derpMap,
 		Domain:           config.BaseDomain,
 		Peers:            peers,
@@ -435,7 +440,7 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 	// TODO(ThomasK33): This needs to get debounced, as clients might send
 	// updates in a very quick succession, which would result in a lot of
 	// unnecessary updates/noise.
-	t.announcePeerChange(node)
+	t.announcePeerChange(*node)
 
 	if !req.Stream {
 		close(resChan)
@@ -449,44 +454,16 @@ func (t *TSCoordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) 
 
 	if !req.OmitPeers {
 		for _, peer := range t.nodes {
-			if peer.Node == nil {
+			if peer.Node.ID == node.ID {
 				continue
 			}
 
-			if peer.NodeID == node.ID {
-				continue
-			}
-
-			peers = append(peers, peer.Node)
+			node := peer.Node
+			peers = append(peers, &node)
 		}
 	}
 
 	return peers
-}
-
-// getNode returns a node for a given request.
-func (*TSCoordinator) getNode(req tailcfg.MapRequest, coordinatorNodeInfo TSNode, peerPublicKey key.MachinePublic, addresses netip.Prefix, lastSeen *time.Time, online *bool) tailcfg.Node {
-	node := tailcfg.Node{
-		Addresses:         []netip.Prefix{addresses},
-		AllowedIPs:        []netip.Prefix{addresses},
-		DiscoKey:          req.DiscoKey,
-		Endpoints:         req.Endpoints,
-		Hostinfo:          req.Hostinfo.View(),
-		ID:                coordinatorNodeInfo.NodeID,
-		Key:               req.NodeKey,
-		LastSeen:          lastSeen,
-		Machine:           peerPublicKey,
-		MachineAuthorized: true,
-		Name:              fmt.Sprintf("%s.%s.", strings.ToLower(req.Hostinfo.Hostname), config.BaseDomain),
-		Online:            online,
-		StableID:          tailcfg.StableNodeID(fmt.Sprintf("stable-%v", coordinatorNodeInfo.NodeID)),
-		User:              coordinatorNodeInfo.UserID,
-	}
-
-	if req.Hostinfo.NetInfo != nil {
-		node.DERP = fmt.Sprintf("127.3.3.40:%v", req.Hostinfo.NetInfo.PreferredDERP)
-	}
-	return node
 }
 
 // cleanupDisconnectedNode cleans up a node that has disconnected from the
@@ -497,27 +474,27 @@ func (t *TSCoordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicK
 	online := false
 	now := time.Now()
 
-	if node.Node != nil {
-		node.Node.Online = &online
-		node.Node.LastSeen = &now
-	}
+	node.Node.Online = &online
+	node.Node.LastSeen = &now
 
 	if node.RemovalTimer != nil {
 		node.RemovalTimer.Stop()
 	}
 	node.RemovalTimer = time.AfterFunc(keepAliveInterval, func() {
-		if node.IP != nil {
-			_, _ = ipam.ReleaseIP(context.Background(), node.IP)
+		if len(node.Node.Addresses) != 0 {
+			for _, address := range node.Node.Addresses {
+				_ = ipam.ReleaseIPFromPrefix(ctx, prefix.Cidr, address.Addr().String())
+			}
 		}
 
 		t.nodeMutex.Lock()
 		delete(t.nodes, peerPublicKey)
 		t.nodeMutex.Unlock()
 
-		t.announcePeerDisconnected(node.NodeID, true)
+		t.announcePeerDisconnected(node.Node.ID, true)
 	})
 
-	t.announcePeerDisconnected(node.NodeID, false)
+	t.announcePeerDisconnected(node.Node.ID, false)
 }
 
 // announcePeerChange announces a peer change to all nodes that are connected to
@@ -525,11 +502,7 @@ func (t *TSCoordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicK
 func (t *TSCoordinator) announcePeerChange(newNode tailcfg.Node) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
-		if node.Node == nil || node.Node.ID == newNode.ID {
-			continue
-		}
-
-		if node.MapRequest == nil {
+		if node.Node.ID == newNode.ID {
 			continue
 		}
 
@@ -565,11 +538,7 @@ func (t *TSCoordinator) announcePeerChange(newNode tailcfg.Node) {
 func (t *TSCoordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove bool) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
-		if node.NodeID == nodeID {
-			continue
-		}
-
-		if node.MapRequest == nil {
+		if node.Node.ID == nodeID {
 			continue
 		}
 
@@ -606,26 +575,28 @@ func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicK
 	var userID int64
 
 	if ok {
-		userID = int64(node.UserID)
+		userID = int64(node.Node.User)
 	} else {
 		var err error
 		node, err = t.authenticateMachine(req, peerPublicKey)
 		if err != nil {
 			return tailcfg.RegisterResponse{}, fmt.Errorf("failed to authenticate machine: %w", err)
 		}
-		userID = int64(node.UserID)
+		userID = int64(node.Node.User)
 	}
 
 	// Check for "1970-01-01T01:02:03+01:00" (123 seconds since unix zero
 	// timestamp) as that means that a node has purposefully logged out.
 	if req.Expiry.Unix() == 123 {
-		t.nodeMutex.Lock()
-		if node.IP != nil {
-			_, _ = ipam.ReleaseIP(context.TODO(), node.IP)
+		if len(node.Node.Addresses) != 0 {
+			for _, address := range node.Node.Addresses {
+				_ = ipam.ReleaseIPFromPrefix(context.Background(), prefix.Cidr, address.Addr().String())
+			}
 		}
+		t.nodeMutex.Lock()
 		delete(t.nodes, peerPublicKey)
 		t.nodeMutex.Unlock()
-		t.announcePeerDisconnected(node.NodeID, true)
+		t.announcePeerDisconnected(node.Node.ID, true)
 
 		return tailcfg.RegisterResponse{}, nil
 	}
@@ -674,9 +645,11 @@ func (t *TSCoordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPub
 
 	t.nodeMutex.Lock()
 	node := TSNode{
-		UserID:        tailcfg.UserID(userID),
-		NodeID:        tailcfg.NodeID(len(t.nodes) + 1),
-		NodePublicKey: req.NodeKey,
+		Node: tailcfg.Node{
+			ID:   tailcfg.NodeID(len(t.nodes) + 1),
+			User: tailcfg.UserID(userID),
+			Key:  req.NodeKey,
+		},
 	}
 	t.nodes[peerPublicKey] = node
 	t.nodeMutex.Unlock()

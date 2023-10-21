@@ -46,10 +46,13 @@
         "nodes": {
           "items": {
             "properties": {
+              "name": {
+                "type": "string"
+              },
               "nodeKey": {
                 "type": "string"
               },
-              "peerPublicKey": {
+              "machineKey": {
                 "type": "string"
               },
               "userId": {
@@ -65,8 +68,8 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "nodeKey",
-              "peerPublicKey",
+              "name",
+              "machineKey",
               "userId",
               "nodeId"
             ]

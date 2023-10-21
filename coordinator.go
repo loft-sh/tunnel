@@ -25,13 +25,15 @@ type TailscaleCoordinator interface {
 	// DerpMap returns the DERP map from the coordinator.
 	DerpMap() (tailcfg.DERPMap, error)
 
-	// KeepAliveInterval is the keep alive interval of the coordinator.
+	// KeepAliveInterval is the keep alive interval used by the coordinator to
+	// periodically send keep alive messages to the tailscale client via the
+	// long poll NetMap request.
 	KeepAliveInterval() time.Duration
 	// PollNetMap handles the netmap polling request from a tailscale client. It
 	// returns a channel of netmap responses and a channel of errors.
 	//
 	// - If the request is a streaming one, the channels are not to be closed
-	// and new responses will be sent on the channels.
+	// and new responses shall be sent via the channels.
 	//
 	// - If the request is a non-streaming one, the channels are to be closed
 	// after the first response is sent.
