@@ -177,6 +177,7 @@ func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *
 			UserID     tailcfg.UserID `json:"userId"`
 			MachineKey string         `json:"machineKey"`
 			NodeKey    string         `json:"nodeKey"`
+			Name       string         `json:"name"`
 		}
 
 		nodes := []nodeInfo{}
@@ -188,6 +189,7 @@ func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *
 				UserID:     v.Node.User,
 				NodeKey:    v.Node.Key.String(),
 				MachineKey: k.String(),
+				Name:       v.Node.Name,
 			})
 		}
 		coordinator.nodeMutex.Unlock()
