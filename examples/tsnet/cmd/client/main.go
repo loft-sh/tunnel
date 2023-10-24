@@ -11,12 +11,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"tailscale.com/envknob"
 	"tailscale.com/tsnet"
 )
 
 func init() {
-	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
+	// envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
 }
 
 func main() {

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"tailscale.com/envknob"
 	"tailscale.com/tsnet"
 )
 
@@ -30,7 +29,7 @@ func init() {
 	// envknob.Setenv("TS_DEBUG_PATCHIFY_PEER", "true")
 	// envknob.Setenv("TS_DEBUG_PROFILES", "true")
 	// envknob.Setenv("TS_DEBUG_REGISTER", "true")
-	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
+	// envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
 }
 
 func main() {

@@ -13,7 +13,7 @@ layout {
   tab name="DERP" {
     pane {
       command "derper"
-      args "-c" "./tmp/derper-a.json" "-a" ":443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-a" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3478" "-http-port" "80"
+      args "-c" "./tmp/derper-a.json" "-a" ":443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-a" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3478" "-http-port" "-1"
     }
 
     pane {
@@ -24,34 +24,6 @@ layout {
     pane {
       command "derper"
       args "-c" "./tmp/derper-c.json" "-a" ":9443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-c" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3480" "-http-port" "-1"
-    }
-  }
-
-  tab name="Coordinator" split_direction="vertical" {
-    pane {
-      name "Server"
-      command "air"
-      cwd "."
-    }
-
-    pane {
-      pane {
-        name "tsnet example"
-        cwd "examples/tsnet"
-      }
-      // pane {
-      //   name "Tailscaled"
-      //   command "bash"
-      //   args "-c" " TS_DEBUG_USE_DERP_HTTP=true sudo -E tailscaled"
-
-      //   focus true
-      // }
-      pane {
-        name "Tunnel"
-        cwd "."
-
-        focus true
-      }
     }
   }
 }

@@ -151,7 +151,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	coordinator := NewTSCoordinator()
-	r.Handle("/*", handlers.CoordinatorHandler(coordinator))
+	r.Mount("/", handlers.CoordinatorHandler(coordinator))
 
 	r.Get("/nodes", NodeInfoHandler(coordinator))
 
@@ -752,11 +752,28 @@ func defaultDerpMap() tailcfg.DERPMap {
 				Avoid:      false,
 				Nodes: []*tailcfg.DERPNode{
 					{
-						Name:     "Embedded Loft DERP",
-						RegionID: 900,
-						HostName: "localhost",
-						IPv4:     "127.0.0.1",
-						DERPPort: 3340,
+						Name:      "Embedded Loft DERP (A)",
+						RegionID:  900,
+						HostName:  "derp-a",
+						IPv4:      "127.0.0.1",
+						DERPPort:  443,
+						CanPort80: true,
+					},
+					{
+						Name:      "Embedded Loft DERP (B)",
+						RegionID:  900,
+						HostName:  "derp-b",
+						IPv4:      "127.0.0.1",
+						DERPPort:  8443,
+						CanPort80: false,
+					},
+					{
+						Name:      "Embedded Loft DERP (C)",
+						RegionID:  900,
+						HostName:  "derp-c",
+						IPv4:      "127.0.0.1",
+						DERPPort:  9443,
+						CanPort80: false,
 					},
 				},
 			},

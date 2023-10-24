@@ -8,8 +8,21 @@ alias align := check-structalign
 _default:
   @just --list
 
-dev:
+dev: mkcerts
+  go install tailscale.com/cmd/derper@main
   zellij -s tunnel --layout tunnel_layout.kdl
+
+mesh: mkcerts
+  go install tailscale.com/cmd/derper@main
+  zellij -s derpmesh --layout derp_mesh.kdl
+
+# --- Certificates ---
+
+mkcerts:
+  mkdir -p tmp/certs
+  mkcert -cert-file tmp/certs/derp-a.crt -key-file tmp/certs/derp-a.key derp-a.local derp-a
+  mkcert -cert-file tmp/certs/derp-b.crt -key-file tmp/certs/derp-b.key derp-b.local derp-b
+  mkcert -cert-file tmp/certs/derp-c.crt -key-file tmp/certs/derp-c.key derp-c.local derp-c
 
 # --- Code quality ---
 

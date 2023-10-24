@@ -15,13 +15,12 @@ import (
 	"log"
 	"net/http"
 
-	"tailscale.com/envknob"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/logger"
 )
 
 func init() {
-	envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
+	// envknob.Setenv("TS_DEBUG_USE_DERP_HTTP", "true")
 }
 
 func main() {
