@@ -4,7 +4,7 @@ go 1.21.3
 
 require (
 	github.com/go-chi/chi/v5 v5.0.10
-	github.com/klauspost/compress v1.17.1
+	github.com/klauspost/compress v1.17.2
 	golang.org/x/net v0.17.0
 	tailscale.com v1.50.1
 )
