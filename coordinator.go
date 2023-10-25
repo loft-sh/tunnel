@@ -9,9 +9,8 @@ import (
 	"tailscale.com/types/key"
 )
 
-// TailscaleCoordinator is the interface that wraps the tailscale coordinator
-// methods.
-type TailscaleCoordinator interface {
+// Coordinator is the interface that wraps the coordinator methods.
+type Coordinator interface {
 	// ControlKey returns the control key for coordinator.
 	ControlKey() key.MachinePrivate
 	// LegacyControlKey returns the legacy control key for coordinator.

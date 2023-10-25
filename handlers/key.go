@@ -18,7 +18,7 @@ const (
 	KeyPattern = "/key"
 )
 
-func KeyHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
+func KeyHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		v := r.URL.Query().Get("v")
 

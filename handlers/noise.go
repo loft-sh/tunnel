@@ -20,7 +20,7 @@ const (
 	NoisePattern = "/ts2021"
 )
 
-func NoiseHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
+func NoiseHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := controlhttp.AcceptHTTP(r.Context(), w, r, coordinator.ControlKey(), nil)
 		if err != nil {
@@ -42,10 +42,13 @@ func NoiseHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
 	}
 }
 
-func CreatePeerHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.Handler {
+func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.Handler {
 	r := chi.NewMux()
 
-	r.Use(middleware.Logger)
+	if ShouldLogRequest {
+		r.Use(middleware.Logger)
+	}
+
 	r.Use(middleware.Recoverer)
 
 	r.MethodFunc(RegistrationMethod, RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))

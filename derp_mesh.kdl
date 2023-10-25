@@ -13,17 +13,17 @@ layout {
   tab name="DERP" {
     pane {
       command "derper"
-      args "-c" "./tmp/derper-a.json" "-a" ":443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-a" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3478" "-http-port" "-1"
+      args "-c" "./tmp/derper-a.json" "-a" ":443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-a" "-mesh-psk-file" "./examples/mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3478" "-http-port" "-1"
     }
 
     pane {
       command "derper"
-      args "-c" "./tmp/derper-b.json" "-a" ":8443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-b" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3479" "-http-port" "-1"
+      args "-c" "./tmp/derper-b.json" "-a" ":8443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-b" "-mesh-psk-file" "./examples/mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3479" "-http-port" "-1"
     }
 
     pane {
       command "derper"
-      args "-c" "./tmp/derper-c.json" "-a" ":9443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-c" "-mesh-psk-file" "./mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3480" "-http-port" "-1"
+      args "-c" "./tmp/derper-c.json" "-a" ":9443" "-certmode" "manual" "-certdir" "./tmp/certs" "-hostname" "derp-c" "-mesh-psk-file" "./examples/mesh.psk" "-mesh-with" "derp-a:443,derp-b:8443,derp-c:9443" "-stun-port" "3480" "-http-port" "-1"
     }
   }
 }

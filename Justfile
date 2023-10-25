@@ -8,16 +8,19 @@ alias align := check-structalign
 _default:
   @just --list
 
+# Start a local coordinator server and derp server
 dev: mkcerts
   go install tailscale.com/cmd/derper@main
   zellij -s tunnel --layout tunnel_layout.kdl
 
+# Start three local derp servers
 mesh: mkcerts
   go install tailscale.com/cmd/derper@main
   zellij -s derpmesh --layout derp_mesh.kdl
 
 # --- Certificates ---
 
+# Create local certificates for derp servers
 mkcerts:
   mkdir -p tmp/certs
   mkcert -cert-file tmp/certs/derp-a.crt -key-file tmp/certs/derp-a.key derp-a.local derp-a
@@ -37,6 +40,7 @@ check-structalign *ARGS:
 
 # --- Go tooling ---
 
+# Go mod tidy the repo and examples
 tidy:
   go mod tidy
   cd examples/coordinator/ && go mod tidy

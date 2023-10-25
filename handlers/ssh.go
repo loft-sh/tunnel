@@ -13,7 +13,7 @@ const (
 	SSHActionPattern = "/ssh/action/*"
 )
 
-func SSHActionHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func SSHActionHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := coordinator.SSHAction(r, peerPublicKey)
 		if err != nil {

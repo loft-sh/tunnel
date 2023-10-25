@@ -38,4 +38,4 @@ require (
 )
 
 // Use tailscale from main branch until a new release with lifted go4.org/netipx dependency is available
-replace tailscale.com => tailscale.com v1.1.1-0.20231017212406-77127a249486
+replace tailscale.com => tailscale.com v1.1.1-0.20231025031627-143bda87a3f2

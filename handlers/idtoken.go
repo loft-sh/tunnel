@@ -14,7 +14,7 @@ const (
 	IDTokenPattern = "/machine/id-token"
 )
 
-func IDTokenHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func IDTokenHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.TokenRequest
 

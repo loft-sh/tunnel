@@ -150,7 +150,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	coordinator := NewTSCoordinator()
+	coordinator := NewCoordinator()
 	r.Mount("/", handlers.CoordinatorHandler(coordinator))
 
 	r.Get("/nodes", NodeInfoHandler(coordinator))
@@ -168,7 +168,7 @@ func main() {
 
 // NodeInfoHandler returns a list of all nodes that are connected to the
 // coordinator.
-func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *http.Request) {
+func NodeInfoHandler(coordinator *Coordinator) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -202,12 +202,12 @@ func NodeInfoHandler(coordinator *TSCoordinator) func(w http.ResponseWriter, r *
 	}
 }
 
-// -- Tailscale Coordinator --
+// -- Coordinator --
 
-// TSNode is a node that is connected to the coordinator.
+// Node is a node that is connected to the coordinator.
 // It contains all the information that is needed to stream a MapResponse to the
 // node.
-type TSNode struct {
+type Node struct {
 	// Done is the context done channel for the streaming request. This channel
 	// is closed when the request is canceled.
 	Done <-chan struct{}
@@ -229,16 +229,16 @@ type TSNode struct {
 	RemovalTimer *time.Timer
 }
 
-// TSCoordinator is a Tailscale coordinator.
-type TSCoordinator struct {
+// Coordinator is a coordinator.
+type Coordinator struct {
 	nodeMutex sync.Mutex
-	nodes     map[key.MachinePublic]TSNode
+	nodes     map[key.MachinePublic]Node
 }
 
-// NewTSCoordinator creates a new Tailscale coordinator.
-func NewTSCoordinator() *TSCoordinator {
-	coordinator := &TSCoordinator{
-		nodes: map[key.MachinePublic]TSNode{},
+// NewCoordinator creates a new coordinator.
+func NewCoordinator() *Coordinator {
+	coordinator := &Coordinator{
+		nodes: map[key.MachinePublic]Node{},
 	}
 
 	if config.Nodes == nil {
@@ -272,7 +272,7 @@ func NewTSCoordinator() *TSCoordinator {
 			panic(err)
 		}
 
-		coordinator.nodes[peerPublicKey] = TSNode{
+		coordinator.nodes[peerPublicKey] = Node{
 			Node: tailcfg.Node{
 				ID:         node.NodeID,
 				User:       node.UserID,
@@ -287,48 +287,48 @@ func NewTSCoordinator() *TSCoordinator {
 	return coordinator
 }
 
-// SSHAction implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) SSHAction(r *http.Request, peerPublicKey key.MachinePublic) (tailcfg.SSHAction, error) {
+// SSHAction implements tunnel.Coordinator.
+func (*Coordinator) SSHAction(r *http.Request, peerPublicKey key.MachinePublic) (tailcfg.SSHAction, error) {
 	panic("unimplemented")
 }
 
-// HealthChange implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) HealthChange(req tailcfg.HealthChangeRequest) {
+// HealthChange implements tunnel.Coordinator.
+func (*Coordinator) HealthChange(req tailcfg.HealthChangeRequest) {
 	panic("unimplemented")
 }
 
-// IDToken implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
+// IDToken implements tunnel.Coordinator.
+func (*Coordinator) IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
 	panic("unimplemented")
 }
 
-// SetDNS implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
+// SetDNS implements tunnel.Coordinator.
+func (*Coordinator) SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
 	panic("unimplemented")
 }
 
-// DerpMap implements tunnel.TailscaleCoordinator.
-func (*TSCoordinator) DerpMap() (tailcfg.DERPMap, error) {
+// DerpMap implements tunnel.Coordinator.
+func (*Coordinator) DerpMap() (tailcfg.DERPMap, error) {
 	return derpMap, nil
 }
 
-// ControlKey implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) ControlKey() key.MachinePrivate {
+// ControlKey implements tunnel.Coordinator.
+func (t *Coordinator) ControlKey() key.MachinePrivate {
 	return *config.ControlKey
 }
 
-// LegacyControlKey implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) LegacyControlKey() key.MachinePrivate {
+// LegacyControlKey implements tunnel.Coordinator.
+func (t *Coordinator) LegacyControlKey() key.MachinePrivate {
 	return *config.LegacyControlKey
 }
 
-// KeepAliveInterval implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) KeepAliveInterval() time.Duration {
+// KeepAliveInterval implements tunnel.Coordinator.
+func (t *Coordinator) KeepAliveInterval() time.Duration {
 	return keepAliveInterval
 }
 
-// PollNetMap implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error) {
+// PollNetMap implements tunnel.Coordinator.
+func (t *Coordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error) {
 	resChan := make(chan tailcfg.MapResponse)
 	errChan := make(chan error)
 
@@ -384,8 +384,8 @@ func (t *TSCoordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, 
 	return resChan, errChan
 }
 
-// DNSConfig implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) DNSConfig() *tailcfg.DNSConfig {
+// DNSConfig implements tunnel.Coordinator.
+func (t *Coordinator) DNSConfig() *tailcfg.DNSConfig {
 	return &tailcfg.DNSConfig{
 		Proxied:      true,
 		Domains:      []string{config.BaseDomain},
@@ -394,7 +394,7 @@ func (t *TSCoordinator) DNSConfig() *tailcfg.DNSConfig {
 }
 
 // handleNetMapRequest handles a netmap request.
-func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, node *tailcfg.Node) {
+func (t *Coordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, node *tailcfg.Node) {
 	derpMap, err := t.DerpMap()
 	if err != nil {
 		errChan <- err
@@ -451,7 +451,7 @@ func (t *TSCoordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, er
 }
 
 // peersForNode returns a list of peers for a given node.
-func (t *TSCoordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) []*tailcfg.Node {
+func (t *Coordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) []*tailcfg.Node {
 	peers := []*tailcfg.Node{}
 
 	if !req.OmitPeers {
@@ -470,7 +470,7 @@ func (t *TSCoordinator) peersForNode(req tailcfg.MapRequest, node tailcfg.Node) 
 
 // cleanupDisconnectedNode cleans up a node that has disconnected from the
 // coordinator.
-func (t *TSCoordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicKey key.MachinePublic, node TSNode) {
+func (t *Coordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicKey key.MachinePublic, node Node) {
 	<-ctx.Done()
 
 	online := false
@@ -501,7 +501,7 @@ func (t *TSCoordinator) cleanupDisconnectedNode(ctx context.Context, peerPublicK
 
 // announcePeerChange announces a peer change to all nodes that are connected to
 // the coordinator.
-func (t *TSCoordinator) announcePeerChange(newNode tailcfg.Node) {
+func (t *Coordinator) announcePeerChange(newNode tailcfg.Node) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
 		if node.Node.ID == newNode.ID {
@@ -537,7 +537,7 @@ func (t *TSCoordinator) announcePeerChange(newNode tailcfg.Node) {
 // announcePeerDisconnected announces a peer disconnect to all nodes that are
 // connected to the coordinator. If `remove` is set to true, the node will be
 // removed from each node's peer list.
-func (t *TSCoordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove bool) {
+func (t *Coordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove bool) {
 	t.nodeMutex.Lock()
 	for _, node := range t.nodes {
 		if node.Node.ID == nodeID {
@@ -565,8 +565,8 @@ func (t *TSCoordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove b
 	t.nodeMutex.Unlock()
 }
 
-// RegisterMachine implements tunnel.TailscaleCoordinator.
-func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
+// RegisterMachine implements tunnel.Coordinator.
+func (t *Coordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
 	// If we already have a node configured with the nodeKey and peerPublicKey,
 	// we should return the same nodeID and userID as before and omit any kind
 	// of authentication, as this was already done before.
@@ -621,14 +621,14 @@ func (t *TSCoordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicK
 
 // authenticateMachine authenticates a machine and returns the node that is
 // associated with the machine.
-func (t *TSCoordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (TSNode, error) {
+func (t *Coordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (Node, error) {
 	if req.Auth.AuthKey == "" {
-		return TSNode{}, ErrMissingAuthKey
+		return Node{}, ErrMissingAuthKey
 	}
 
 	userID, err := strconv.ParseInt(req.Auth.AuthKey, 10, 64)
 	if err != nil {
-		return TSNode{}, fmt.Errorf("failed to parse auth key: %w", err)
+		return Node{}, fmt.Errorf("failed to parse auth key: %w", err)
 	}
 
 	profileFound := false
@@ -642,11 +642,11 @@ func (t *TSCoordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPub
 
 	if !profileFound {
 		//nolint:goerr113
-		return TSNode{}, fmt.Errorf("user profile with id %v not found", userID)
+		return Node{}, fmt.Errorf("user profile with id %v not found", userID)
 	}
 
 	t.nodeMutex.Lock()
-	node := TSNode{
+	node := Node{
 		Node: tailcfg.Node{
 			ID:   tailcfg.NodeID(len(t.nodes) + 1),
 			User: tailcfg.UserID(userID),
@@ -659,8 +659,8 @@ func (t *TSCoordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPub
 	return node, nil
 }
 
-// TSCoordinator implements tunnel.TailscaleCoordinator.
-var _ tunnel.TailscaleCoordinator = (*TSCoordinator)(nil)
+// TSCoordinator implements tunnel.Coordinator.
+var _ tunnel.Coordinator = (*Coordinator)(nil)
 
 // --- Utils ---
 

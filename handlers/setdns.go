@@ -15,7 +15,7 @@ const (
 	SetDNSLegacyPattern = "/machine/{mkeyhex}/set-dns"
 )
 
-func SetDNSHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func SetDNSHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.SetDNSRequest
 

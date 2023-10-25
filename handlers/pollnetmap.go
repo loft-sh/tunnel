@@ -25,7 +25,7 @@ const (
 	PollNetMapLegacyPattern = "/machine/{mkeyhex}/map"
 )
 
-func PollNetMapHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func PollNetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithCancelCause(r.Context())
 

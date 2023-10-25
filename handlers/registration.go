@@ -15,7 +15,7 @@ const (
 	RegistrationLegacyPattern = "/machine/{mkeyhex}"
 )
 
-func RegistrationHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func RegistrationHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(r.Body)
 

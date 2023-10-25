@@ -12,7 +12,7 @@ const (
 	DerpMapPattern = "/derpmap/default"
 )
 
-func DerpMapHandler(coordinator tunnel.TailscaleCoordinator) http.HandlerFunc {
+func DerpMapHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := coordinator.DerpMap()
 		if err != nil {

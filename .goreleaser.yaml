@@ -22,7 +22,7 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
-    binary: tscoordinator
+    binary: coordinator
     dir: ./examples/coordinator/
     mod_timestamp: "{{ .CommitTimestamp }}"
     flags:

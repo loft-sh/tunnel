@@ -5,7 +5,7 @@ go 1.21.3
 require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/invopop/jsonschema v0.12.0
-	github.com/loft-sh/tunnel v0.0.0-20231017172637-b5e44d2a29bf
+	github.com/loft-sh/tunnel v0.1.0
 	github.com/metal-stack/go-ipam v1.12.6
 	tailscale.com v1.50.1
 )
@@ -19,7 +19,7 @@ require (
 	github.com/coreos/go-iptables v0.7.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/dblohm7/wingoes v0.0.0-20231010205534-fae7ee30e4f3 // indirect
+	github.com/dblohm7/wingoes v0.0.0-20231019175336-f6e33aa7cc34 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -31,7 +31,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/native v1.1.1-0.20230202152459-5c7d0dd6ab86 // indirect
 	github.com/jsimonetti/rtnetlink v1.3.5 // indirect
-	github.com/klauspost/compress v1.17.1 // indirect
+	github.com/klauspost/compress v1.17.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
@@ -69,10 +69,10 @@ require (
 	google.golang.org/grpc v1.59.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	nhooyr.io/websocket v1.8.7 // indirect
+	nhooyr.io/websocket v1.8.9 // indirect
 )
 
 // Use tailscale from main branch until a new release with lifted go4.org/netipx dependency is available
-replace tailscale.com => tailscale.com v1.1.1-0.20231017212406-77127a249486
+replace tailscale.com => tailscale.com v1.1.1-0.20231025031627-143bda87a3f2
 
 replace github.com/loft-sh/tunnel => ../..

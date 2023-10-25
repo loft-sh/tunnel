@@ -14,7 +14,7 @@ const (
 	HealthChangePattern = "/machine/health-change"
 )
 
-func HealthChangeHandler(coordinator tunnel.TailscaleCoordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func HealthChangeHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.HealthChangeRequest
 
