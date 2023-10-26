@@ -293,22 +293,22 @@ func (*Coordinator) SSHAction(r *http.Request, peerPublicKey key.MachinePublic) 
 }
 
 // HealthChange implements tunnel.Coordinator.
-func (*Coordinator) HealthChange(req tailcfg.HealthChangeRequest) {
+func (*Coordinator) HealthChange(ctx context.Context, req tailcfg.HealthChangeRequest) {
 	panic("unimplemented")
 }
 
 // IDToken implements tunnel.Coordinator.
-func (*Coordinator) IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
+func (*Coordinator) IDToken(ctx context.Context, req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
 	panic("unimplemented")
 }
 
 // SetDNS implements tunnel.Coordinator.
-func (*Coordinator) SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
+func (*Coordinator) SetDNS(ctx context.Context, req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
 	panic("unimplemented")
 }
 
 // DerpMap implements tunnel.Coordinator.
-func (*Coordinator) DerpMap() (tailcfg.DERPMap, error) {
+func (*Coordinator) DerpMap(ctx context.Context) (tailcfg.DERPMap, error) {
 	return derpMap, nil
 }
 
@@ -379,7 +379,7 @@ func (t *Coordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, pe
 		go t.cleanupDisconnectedNode(ctx, peerPublicKey, node)
 	}
 
-	go t.handleNetMapRequest(resChan, errChan, req, peerPublicKey, &node.Node)
+	go t.handleNetMapRequest(ctx, resChan, errChan, req, peerPublicKey, &node.Node)
 
 	return resChan, errChan
 }
@@ -394,8 +394,8 @@ func (t *Coordinator) DNSConfig() *tailcfg.DNSConfig {
 }
 
 // handleNetMapRequest handles a netmap request.
-func (t *Coordinator) handleNetMapRequest(resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, node *tailcfg.Node) {
-	derpMap, err := t.DerpMap()
+func (t *Coordinator) handleNetMapRequest(ctx context.Context, resChan chan tailcfg.MapResponse, errChan chan error, req tailcfg.MapRequest, peerPublicKey key.MachinePublic, node *tailcfg.Node) {
+	derpMap, err := t.DerpMap(ctx)
 	if err != nil {
 		errChan <- err
 		return
@@ -566,7 +566,7 @@ func (t *Coordinator) announcePeerDisconnected(nodeID tailcfg.NodeID, remove boo
 }
 
 // RegisterMachine implements tunnel.Coordinator.
-func (t *Coordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
+func (t *Coordinator) RegisterMachine(ctx context.Context, req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error) {
 	// If we already have a node configured with the nodeKey and peerPublicKey,
 	// we should return the same nodeID and userID as before and omit any kind
 	// of authentication, as this was already done before.
@@ -592,7 +592,7 @@ func (t *Coordinator) RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey
 	if req.Expiry.Unix() == 123 {
 		if len(node.Node.Addresses) != 0 {
 			for _, address := range node.Node.Addresses {
-				_ = ipam.ReleaseIPFromPrefix(context.Background(), prefix.Cidr, address.Addr().String())
+				_ = ipam.ReleaseIPFromPrefix(ctx, prefix.Cidr, address.Addr().String())
 			}
 		}
 		t.nodeMutex.Lock()

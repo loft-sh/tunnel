@@ -19,10 +19,10 @@ type Coordinator interface {
 	// RegisterMachine is responsible for registering the machine with the
 	// coordinator. It returns the registration response from the coordinator
 	// and an error if any.
-	RegisterMachine(req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error)
+	RegisterMachine(ctx context.Context, req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error)
 
 	// DerpMap returns the DERP map from the coordinator.
-	DerpMap() (tailcfg.DERPMap, error)
+	DerpMap(ctx context.Context) (tailcfg.DERPMap, error)
 
 	// KeepAliveInterval is the keep alive interval used by the coordinator to
 	// periodically send keep alive messages to the tailscale client via the
@@ -42,13 +42,13 @@ type Coordinator interface {
 	PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
 
 	// SetDNS handles the DNS setting request from a tailscale client.
-	SetDNS(req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
+	SetDNS(ctx context.Context, req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
 
 	// HealthChange handles the health change request from a tailscale client.
-	HealthChange(req tailcfg.HealthChangeRequest)
+	HealthChange(ctx context.Context, req tailcfg.HealthChangeRequest)
 
 	// IDToken handles the ID token request from a tailscale client.
-	IDToken(req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error)
+	IDToken(ctx context.Context, req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error)
 
 	// SSHAction handles the SSH action request from a tailscale client.
 	//

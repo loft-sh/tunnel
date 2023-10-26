@@ -14,7 +14,7 @@ const (
 
 func DerpMapHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		res, err := coordinator.DerpMap()
+		res, err := coordinator.DerpMap(r.Context())
 		if err != nil {
 			handleAPIError(w, err, "Failed to get derp map")
 

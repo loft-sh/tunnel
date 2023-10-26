@@ -25,7 +25,7 @@ func SetDNSHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePubl
 			return
 		}
 
-		res, err := coordinator.SetDNS(req, peerPublicKey)
+		res, err := coordinator.SetDNS(r.Context(), req, peerPublicKey)
 		if err != nil {
 			handleAPIError(w, err, "Failed to set DNS")
 			return

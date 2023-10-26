@@ -28,7 +28,7 @@ func RegistrationHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machi
 			return
 		}
 
-		res, err := coordinator.RegisterMachine(req, peerPublicKey)
+		res, err := coordinator.RegisterMachine(r.Context(), req, peerPublicKey)
 		if err != nil {
 			res = tailcfg.RegisterResponse{
 				Error: err.Error(),

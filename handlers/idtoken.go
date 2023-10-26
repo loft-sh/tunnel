@@ -24,7 +24,7 @@ func IDTokenHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePub
 			return
 		}
 
-		res, err := coordinator.IDToken(req, peerPublicKey)
+		res, err := coordinator.IDToken(r.Context(), req, peerPublicKey)
 		if err != nil {
 			handleAPIError(w, err, "Failed to set DNS")
 			return

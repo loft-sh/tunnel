@@ -27,6 +27,6 @@ func HealthChangeHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machi
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		coordinator.HealthChange(req)
+		coordinator.HealthChange(r.Context(), req)
 	}
 }
