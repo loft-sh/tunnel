@@ -57,9 +57,7 @@ func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machine
 	r.MethodFunc(SSHActionMethod, SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
 
 	if subPath != "/" {
-		router := chi.NewMux()
-		router.Mount(subPath, r)
-		r = router
+		return http.StripPrefix(subPath, r)
 	}
 
 	return r

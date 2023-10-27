@@ -41,15 +41,7 @@ func CoordinatorHandlerWithSubpath(coordinator tunnel.Coordinator, subPath strin
 	mux.MethodFunc(NoiseMethod, NoisePattern, NoiseHandler(coordinator, subPath))
 
 	if subPath != "/" {
-		router := chi.NewMux()
-
-		if ShouldLogRequest {
-			mux.Use(middleware.Logger)
-		}
-		router.Use(middleware.Recoverer)
-		router.Mount(subPath, mux)
-
-		return router
+		return http.StripPrefix(subPath, mux)
 	}
 
 	return mux
