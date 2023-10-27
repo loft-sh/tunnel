@@ -20,16 +20,14 @@ const (
 	NoisePattern = "/ts2021"
 )
 
-func NoiseHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
+func NoiseHandler(coordinator tunnel.Coordinator, subPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := controlhttp.AcceptHTTP(r.Context(), w, r, coordinator.ControlKey(), nil)
 		if err != nil {
-			handleAPIError(w, err, "Failed to accept HTTP connection")
-
 			return
 		}
 
-		handler := CreatePeerHandler(coordinator, conn.Peer())
+		handler := CreatePeerHandler(coordinator, conn.Peer(), subPath)
 
 		server := http.Server{}
 		server.Handler = h2c.NewHandler(handler, &http2.Server{})
@@ -42,7 +40,7 @@ func NoiseHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
 	}
 }
 
-func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.Handler {
+func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic, subPath string) http.Handler {
 	r := chi.NewMux()
 
 	if ShouldLogRequest {
@@ -57,6 +55,12 @@ func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machine
 	r.MethodFunc(HealthChangeMethod, HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
 	r.MethodFunc(IDTokenMethod, IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
 	r.MethodFunc(SSHActionMethod, SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
+
+	if subPath != "/" {
+		router := chi.NewMux()
+		router.Mount(subPath, r)
+		r = router
+	}
 
 	return r
 }
