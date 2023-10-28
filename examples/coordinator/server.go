@@ -327,8 +327,8 @@ func (t *Coordinator) KeepAliveInterval() time.Duration {
 	return keepAliveInterval
 }
 
-// PollNetMap implements tunnel.Coordinator.
-func (t *Coordinator) PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error) {
+// NetMap implements tunnel.Coordinator.
+func (t *Coordinator) NetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error) {
 	resChan := make(chan tailcfg.MapResponse)
 	errChan := make(chan error)
 

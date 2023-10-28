@@ -17,15 +17,15 @@ import (
 	"tailscale.com/types/key"
 )
 
-var ErrPollNetmapClosed = errors.New("poll netmap closed")
+var ErrNetmapClosed = errors.New("netmap closed")
 
 const (
-	PollNetMapMethod        = http.MethodPost
-	PollNetMapPattern       = "/machine/map"
-	PollNetMapLegacyPattern = "/machine/{mkeyhex}/map"
+	NetMapMethod        = http.MethodPost
+	NetMapPattern       = "/machine/map"
+	NetMapLegacyPattern = "/machine/{mkeyhex}/map"
 )
 
-func PollNetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+func NetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithCancelCause(r.Context())
 
@@ -38,7 +38,7 @@ func PollNetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machine
 			return
 		}
 
-		resChan, errChan := coordinator.PollNetMap(ctx, req, peerPublicKey)
+		resChan, errChan := coordinator.NetMap(ctx, req, peerPublicKey)
 
 		keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
 		defer keepAliveTicker.Stop()
@@ -62,7 +62,7 @@ func PollNetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machine
 			}
 
 			if !more {
-				cancel(ErrPollNetmapClosed)
+				cancel(ErrNetmapClosed)
 				return
 			}
 

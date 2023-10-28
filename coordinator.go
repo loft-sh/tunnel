@@ -28,7 +28,7 @@ type Coordinator interface {
 	// periodically send keep alive messages to the tailscale client via the
 	// long poll NetMap request.
 	KeepAliveInterval() time.Duration
-	// PollNetMap handles the netmap polling request from a tailscale client. It
+	// NetMap handles the netmap polling request from a tailscale client. It
 	// returns a channel of netmap responses and a channel of errors.
 	//
 	// - If the request is a streaming one, the channels are not to be closed
@@ -39,7 +39,7 @@ type Coordinator interface {
 	//
 	// - If the request gets closed or cancelled by the tailscale client, the
 	// context will be cancelled and the channels shall not be used anymore.
-	PollNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
+	NetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
 
 	// SetDNS handles the DNS setting request from a tailscale client.
 	SetDNS(ctx context.Context, req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)

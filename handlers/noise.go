@@ -50,7 +50,7 @@ func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.Machine
 	r.Use(middleware.Recoverer)
 
 	r.MethodFunc(RegistrationMethod, RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
-	r.MethodFunc(PollNetMapMethod, PollNetMapPattern, PollNetMapHandler(coordinator, peerPublicKey))
+	r.MethodFunc(NetMapMethod, NetMapPattern, NetMapHandler(coordinator, peerPublicKey))
 	r.MethodFunc(SetDNSMethod, SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
 	r.MethodFunc(HealthChangeMethod, HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
 	r.MethodFunc(IDTokenMethod, IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
