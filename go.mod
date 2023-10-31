@@ -6,7 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/klauspost/compress v1.17.2
 	golang.org/x/net v0.17.0
-	tailscale.com v1.50.1
+	tailscale.com v1.52.0
 )
 
 require (
@@ -36,6 +36,3 @@ require (
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	nhooyr.io/websocket v1.8.9 // indirect
 )
-
-// Use tailscale from main branch until a new release with lifted go4.org/netipx dependency is available
-replace tailscale.com => tailscale.com v1.1.1-0.20231025031627-143bda87a3f2
