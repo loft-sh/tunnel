@@ -6,7 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/klauspost/compress v1.17.2
 	golang.org/x/net v0.17.0
-	tailscale.com v1.52.0
+	tailscale.com v1.52.1
 )
 
 require (
