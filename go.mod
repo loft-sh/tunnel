@@ -5,7 +5,7 @@ go 1.21.3
 require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/klauspost/compress v1.17.2
-	golang.org/x/net v0.17.0
+	golang.org/x/net v0.18.0
 	tailscale.com v1.52.1
 )
 
@@ -26,7 +26,7 @@ require (
 	github.com/vishvananda/netns v0.0.4 // indirect
 	go4.org/mem v0.0.0-20220726221520-4f986261bf13 // indirect
 	go4.org/netipx v0.0.0-20230824141953-6213f710f925 // indirect
-	golang.org/x/crypto v0.14.0 // indirect
+	golang.org/x/crypto v0.15.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect
