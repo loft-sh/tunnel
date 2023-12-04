@@ -7,7 +7,7 @@ require (
 	github.com/invopop/jsonschema v0.12.0
 	github.com/loft-sh/tunnel v0.1.0
 	github.com/metal-stack/go-ipam v1.12.6
-	tailscale.com v1.54.0
+	tailscale.com v1.54.1
 )
 
 require (
@@ -31,7 +31,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/native v1.1.1-0.20230202152459-5c7d0dd6ab86 // indirect
 	github.com/jsimonetti/rtnetlink v1.3.5 // indirect
-	github.com/klauspost/compress v1.17.2 // indirect
+	github.com/klauspost/compress v1.17.3 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
