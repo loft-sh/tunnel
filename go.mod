@@ -6,7 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/klauspost/compress v1.17.4
 	golang.org/x/net v0.19.0
-	tailscale.com v1.54.1
+	tailscale.com v1.56.1
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	golang.org/x/sync v0.5.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.14.0 // indirect
+	golang.org/x/tools v0.15.0 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	nhooyr.io/websocket v1.8.10 // indirect
 )
