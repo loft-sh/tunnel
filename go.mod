@@ -3,7 +3,7 @@ module github.com/loft-sh/tunnel
 go 1.21.3
 
 require (
-	github.com/go-chi/chi/v5 v5.0.10
+	github.com/go-chi/chi/v5 v5.0.11
 	github.com/klauspost/compress v1.17.4
 	golang.org/x/net v0.19.0
 	tailscale.com v1.56.1
