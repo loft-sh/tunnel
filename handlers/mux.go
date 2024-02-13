@@ -2,15 +2,10 @@ package handlers
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/loft-sh/tunnel"
 )
-
-var ShouldLogRequest = os.Getenv("LOG_NOISE_REQUEST") == "true"
 
 // CoordinatorHandler returns a http.Handler that handles all requests to the
 // coordinator, including the noise requests.
@@ -28,17 +23,11 @@ func CoordinatorHandlerWithSubpath(coordinator tunnel.Coordinator, subPath strin
 		subPath = "/"
 	}
 
-	mux := chi.NewMux()
+	mux := http.NewServeMux()
 
-	if ShouldLogRequest {
-		mux.Use(middleware.Logger)
-	}
-
-	mux.Use(middleware.Recoverer)
-
-	mux.MethodFunc(KeyMethod, KeyPattern, KeyHandler(coordinator))
-	mux.MethodFunc(DerpMapMethod, DerpMapPattern, DerpMapHandler(coordinator))
-	mux.MethodFunc(NoiseMethod, NoisePattern, NoiseHandler(coordinator, subPath))
+	mux.HandleFunc(KeyMethod+" "+KeyPattern, KeyHandler(coordinator))
+	mux.HandleFunc(DerpMapMethod+" "+DerpMapPattern, DerpMapHandler(coordinator))
+	mux.HandleFunc(NoiseMethod+" "+NoisePattern, NoiseHandler(coordinator, subPath))
 
 	if subPath != "/" {
 		return http.StripPrefix(subPath, mux)

@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/loft-sh/tunnel"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -41,20 +39,14 @@ func NoiseHandler(coordinator tunnel.Coordinator, subPath string) http.HandlerFu
 }
 
 func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic, subPath string) http.Handler {
-	r := chi.NewMux()
+	r := http.NewServeMux()
 
-	if ShouldLogRequest {
-		r.Use(middleware.Logger)
-	}
-
-	r.Use(middleware.Recoverer)
-
-	r.MethodFunc(RegistrationMethod, RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
-	r.MethodFunc(NetMapMethod, NetMapPattern, NetMapHandler(coordinator, peerPublicKey))
-	r.MethodFunc(SetDNSMethod, SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
-	r.MethodFunc(HealthChangeMethod, HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
-	r.MethodFunc(IDTokenMethod, IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
-	r.MethodFunc(SSHActionMethod, SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
+	r.HandleFunc(RegistrationMethod+" "+RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
+	r.HandleFunc(NetMapMethod+" "+NetMapPattern, NetMapHandler(coordinator, peerPublicKey))
+	r.HandleFunc(SetDNSMethod+" "+SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
+	r.HandleFunc(HealthChangeMethod+" "+HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
+	r.HandleFunc(IDTokenMethod+" "+IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
+	r.HandleFunc(SSHActionMethod+" "+SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
 
 	if subPath != "/" {
 		return http.StripPrefix(subPath, r)
