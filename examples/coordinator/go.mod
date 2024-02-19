@@ -3,7 +3,7 @@ module github.com/loft-sh/tunnel/examples/coordinator
 go 1.22.0
 
 require (
-	github.com/go-chi/chi/v5 v5.0.11
+	github.com/go-chi/chi/v5 v5.0.12
 	github.com/invopop/jsonschema v0.12.0
 	github.com/loft-sh/tunnel v0.1.0
 	github.com/metal-stack/go-ipam v1.13.0
