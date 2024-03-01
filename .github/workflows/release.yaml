@@ -32,7 +32,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Setup Just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v2
 
       - name: Setup Cosgin
         uses: sigstore/cosign-installer@main
