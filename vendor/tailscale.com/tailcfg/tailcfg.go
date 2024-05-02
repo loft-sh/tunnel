@@ -7,6 +7,7 @@ package tailcfg
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 	"tailscale.com/types/opt"
 	"tailscale.com/types/structs"
 	"tailscale.com/types/tkatype"
-	"tailscale.com/util/cmpx"
 	"tailscale.com/util/dnsname"
 	"tailscale.com/util/slicesx"
 )
@@ -106,7 +106,7 @@ type CapabilityVersion int
 //   - 63: 2023-06-08: Client understands SSHAction.AllowRemotePortForwarding.
 //   - 64: 2023-07-11: Client understands s/CapabilityTailnetLockAlpha/CapabilityTailnetLock
 //   - 65: 2023-07-12: Client understands DERPMap.HomeParams + incremental DERPMap updates with params
-//   - 66: 2023-07-23: UserProfile.Groups added (available via WhoIs)
+//   - 66: 2023-07-23: UserProfile.Groups added (available via WhoIs) (removed in 87)
 //   - 67: 2023-07-25: Client understands PeerCapMap
 //   - 68: 2023-08-09: Client has dedicated updateRoutine; MapRequest.Stream true means ignore Hostinfo+Endpoints
 //   - 69: 2023-08-16: removed Debug.LogHeap* + GoroutineDumpURL; added c2n /debug/logheap
@@ -126,7 +126,12 @@ type CapabilityVersion int
 //   - 83: 2023-12-18: Client understands DefaultAutoUpdate
 //   - 84: 2024-01-04: Client understands SeamlessKeyRenewal
 //   - 85: 2024-01-05: Client understands MaxKeyDuration
-const CurrentCapabilityVersion CapabilityVersion = 85
+//   - 86: 2024-01-23: Client understands NodeAttrProbeUDPLifetime
+//   - 87: 2024-02-11: UserProfile.Groups removed (added in 66)
+//   - 88: 2024-03-05: Client understands NodeAttrSuggestExitNode
+//   - 89: 2024-03-23: Client no longer respects deleted PeerChange.Capabilities (use CapMap)
+//   - 90: 2024-04-03: Client understands PeerCapabilityTaildrive.
+const CurrentCapabilityVersion CapabilityVersion = 90
 
 type StableID string
 
@@ -197,13 +202,6 @@ type UserProfile struct {
 	// Roles exists for legacy reasons, to keep old macOS clients
 	// happy. It JSON marshals as [].
 	Roles emptyStructJSONSlice
-
-	// Groups contains group identifiers for any group that this user is
-	// a part of and that the coordination server is configured to tell
-	// your node about. (Thus, it may be empty or incomplete.)
-	// There's no semantic difference between a nil and an empty list.
-	// The list is always sorted.
-	Groups []string `json:",omitempty"`
 }
 
 func (p *UserProfile) Equal(p2 *UserProfile) bool {
@@ -216,8 +214,7 @@ func (p *UserProfile) Equal(p2 *UserProfile) bool {
 	return p.ID == p2.ID &&
 		p.LoginName == p2.LoginName &&
 		p.DisplayName == p2.DisplayName &&
-		p.ProfilePicURL == p2.ProfilePicURL &&
-		(len(p.Groups) == 0 && len(p2.Groups) == 0 || reflect.DeepEqual(p.Groups, p2.Groups))
+		p.ProfilePicURL == p2.ProfilePicURL
 }
 
 type emptyStructJSONSlice struct{}
@@ -330,7 +327,7 @@ type Node struct {
 	//    "https://tailscale.com/cap/is-admin"
 	//    "https://tailscale.com/cap/file-sharing"
 	//
-	// Deprecated: use CapMap instead.
+	// Deprecated: use CapMap instead. See https://github.com/tailscale/tailscale/issues/11508
 	Capabilities []NodeCapability `json:",omitempty"`
 
 	// CapMap is a map of capabilities to their optional argument/data values.
@@ -420,7 +417,7 @@ func (v NodeView) HasCap(cap NodeCapability) bool {
 // HasCap reports whether the node has the given capability.
 // It is safe to call on a nil Node.
 func (v *Node) HasCap(cap NodeCapability) bool {
-	return v != nil && (v.CapMap.Contains(cap) || slices.Contains(v.Capabilities, cap))
+	return v != nil && v.CapMap.Contains(cap)
 }
 
 // DisplayName returns the user-facing name for a node which should
@@ -474,7 +471,7 @@ func (n *Node) IsTagged() bool {
 
 // SharerOrUser Sharer if set, else User.
 func (n *Node) SharerOrUser() UserID {
-	return cmpx.Or(n.Sharer, n.User)
+	return cmp.Or(n.Sharer, n.User)
 }
 
 // IsTagged reports whether the node has any tags.
@@ -685,6 +682,11 @@ type Location struct {
 	// geographical location, within the tailnet.
 	// IATA, ICAO or ISO 3166-2 codes are recommended ("YSE")
 	CityCode string `json:",omitempty"`
+
+	// Latitude, Longitude are optional geographical coordinates of the node, in degrees.
+	// No particular accuracy level is promised; the coordinates may simply be the center of the city or country.
+	Latitude  float64 `json:",omitempty"`
+	Longitude float64 `json:",omitempty"`
 
 	// Priority determines the order of use of an exit node when a
 	// location based preference matches more than one exit node,
@@ -1344,6 +1346,8 @@ const (
 	// PeerCapabilityWebUI grants the ability for a peer to edit features from the
 	// device Web UI.
 	PeerCapabilityWebUI PeerCapability = "tailscale.com/cap/webui"
+	// PeerCapabilityTaildrive grants the ability for a peer to access Taildrive shares.
+	PeerCapabilityTaildrive PeerCapability = "tailscale.com/cap/drive"
 )
 
 // NodeCapMap is a map of capabilities to their optional values. It is valid for
@@ -2086,7 +2090,7 @@ const (
 	CapabilitySSHRuleIn          NodeCapability = "https://tailscale.com/cap/ssh-rule-in"           // some SSH rule reach this node
 	CapabilityDataPlaneAuditLogs NodeCapability = "https://tailscale.com/cap/data-plane-audit-logs" // feature enabled
 	CapabilityDebug              NodeCapability = "https://tailscale.com/cap/debug"                 // exposes debug endpoints over the PeerAPI
-	CapabilityHTTPS              NodeCapability = "https"                                           // https cert provisioning enabled on tailnet
+	CapabilityHTTPS              NodeCapability = "https"
 
 	// CapabilityBindToInterfaceByRoute changes how Darwin nodes create
 	// sockets (in the net/netns package). See that package for more
@@ -2129,6 +2133,13 @@ const (
 	// ranges (e.g. "80,443,8080-8090") in the ports query parameter.
 	// e.g. https://tailscale.com/cap/funnel-ports?ports=80,443,8080-8090
 	CapabilityFunnelPorts NodeCapability = "https://tailscale.com/cap/funnel-ports"
+
+	// NodeAttrOnlyTCP443 specifies that the client should not attempt to generate
+	// any outbound traffic that isn't TCP on port 443 (HTTPS). This is used for
+	// clients in restricted environments where only HTTPS traffic is allowed
+	// other types of traffic trips outbound firewall alarms. This thus implies
+	// all traffic is over DERP.
+	NodeAttrOnlyTCP443 NodeCapability = "only-tcp-443"
 
 	// NodeAttrFunnel grants the ability for a node to host ingress traffic.
 	NodeAttrFunnel NodeCapability = "funnel"
@@ -2203,6 +2214,23 @@ const (
 	// NodeAttrSeamlessKeyRenewal makes clients enable beta functionality
 	// of renewing node keys without breaking connections.
 	NodeAttrSeamlessKeyRenewal NodeCapability = "seamless-key-renewal"
+
+	// NodeAttrProbeUDPLifetime makes the client probe UDP path lifetime at the
+	// tail end of an active direct connection in magicsock.
+	NodeAttrProbeUDPLifetime NodeCapability = "probe-udp-lifetime"
+
+	// NodeAttrsTaildriveShare enables sharing via Taildrive.
+	NodeAttrsTaildriveShare NodeCapability = "drive:share"
+
+	// NodeAttrsTaildriveAccess enables accessing shares via Taildrive.
+	NodeAttrsTaildriveAccess NodeCapability = "drive:access"
+
+	// NodeAttrSuggestExitNode is applied to each exit node which the control plane has determined
+	// is a recommended exit node.
+	NodeAttrSuggestExitNode NodeCapability = "suggest-exit-node"
+
+	// NodeAttrDisableWebClient disables using the web client.
+	NodeAttrDisableWebClient NodeCapability = "disable-web-client"
 )
 
 // SetDNSRequest is a request to add a DNS record.
@@ -2247,6 +2275,10 @@ type SetDNSResponse struct{}
 type HealthChangeRequest struct {
 	Subsys string // a health.Subsystem value in string form
 	Error  string // or empty if cleared
+
+	// NodeKey is the client's current node key.
+	// In clients <= 1.62.0 it was always the zero value.
+	NodeKey key.NodePublic
 }
 
 // SSHPolicy is the policy for how to handle incoming SSH connections
@@ -2637,11 +2669,6 @@ type PeerChange struct {
 
 	// KeyExpiry, if non-nil, changes the NodeID's key expiry.
 	KeyExpiry *time.Time `json:",omitempty"`
-
-	// Capabilities, if non-nil, means that the NodeID's capabilities changed.
-	// It's a pointer to a slice for "omitempty", to allow differentiating
-	// a change to empty from no change.
-	Capabilities *[]NodeCapability `json:",omitempty"`
 }
 
 // DerpMagicIP is a fake WireGuard endpoint IP address that means to
@@ -2664,3 +2691,21 @@ type EarlyNoise struct {
 	// the client to prove possession of a wireguard private key.
 	NodeKeyChallenge key.ChallengePublic `json:"nodeKeyChallenge"`
 }
+
+// LBHeader is the HTTP request header used to provide a load balancer or
+// internal reverse proxy with information about the request body without the
+// reverse proxy needing to read the body to parse it out. Think of it akin to
+// an HTTP Host header or SNI. The value may be absent (notably for old clients)
+// but if present, it should match the request. A non-empty value that doesn't
+// match the request body's.
+//
+// The possible values depend on the request path, but for /machine (Noise)
+// requests, they'll usually be a node public key (in key.NodePublic.String
+// format), matching the Request JSON body's NodeKey.
+//
+// Note that this is not a security or authentication header; it's strictly
+// denormalized redundant data as an optimization.
+//
+// For some request types, the header may have multiple values. (e.g. OldNodeKey
+// vs NodeKey)
+const LBHeader = "Ts-Lb"

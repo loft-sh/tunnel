@@ -62,6 +62,11 @@ type nftable struct {
 //   - The table and chain conventions followed here are those used by
 //     `iptables-nft` and `ufw`, so that those tools co-exist and do not
 //     negatively affect Tailscale function.
+//   - Be mindful that 1) all chains attached to a given hook (i.e the forward hook)
+//     will be processed in priority order till either a rule in one of the chains issues a drop verdict
+//     or there are no more chains for that hook
+//     2) processing of individual rules within a chain will stop once one of them issues a final verdict (accept, drop).
+//     https://wiki.nftables.org/wiki-nftables/index.php/Configuring_chains
 type nftablesRunner struct {
 	conn *nftables.Conn
 	nft4 *nftable
@@ -173,7 +178,7 @@ func (n *nftablesRunner) DNATNonTailscaleTraffic(tunname string, dst netip.Addr)
 			},
 		},
 	}
-	n.conn.AddRule(dnatRule)
+	n.conn.InsertRule(dnatRule)
 	return n.conn.Flush()
 }
 
@@ -238,6 +243,25 @@ func (n *nftablesRunner) AddSNATRuleForDst(src, dst netip.Addr) error {
 	return n.conn.Flush()
 }
 
+// ClampMSSToPMTU ensures that all packets with TCP flags (SYN, ACK, RST) set
+// being forwarded via the given interface (tun) have MSS set to <MTU of the
+// interface> - 40 (IP and TCP headers). This can be useful if this tailscale
+// instance is expected to run as a forwarding proxy, forwarding packets from an
+// endpoint with higher MTU in an environment where path MTU discovery is
+// expected to not work (such as the proxies created by the Tailscale Kubernetes
+// operator). ClamMSSToPMTU creates a new base-chain ts-clamp in the filter
+// table with accept policy and priority -150. In practice, this means that for
+// SYN packets the clamp rule in this chain will likely run first and accept the
+// packet. This is fine because 1) nftables run ALL chains with the same hook
+// type unless a rule in one of them drops the packet and 2) this chain does not
+// have functionality to drop the packet- so in practice a matching clamp rule
+// will always be followed by the custom tailscale filtering rules in the other
+// chains attached to the filter hook (FORWARD, ts-forward).
+// We do not want to place the clamping rule into FORWARD/ts-forward chains
+// because wgengine populates those chains with rules that contain accept
+// verdicts that would cause no further procesing within that chain. This
+// functionality is currently invoked from outside wgengine (containerboot), so
+// we don't want to race with wgengine for rule ordering within chains.
 func (n *nftablesRunner) ClampMSSToPMTU(tun string, addr netip.Addr) error {
 	polAccept := nftables.ChainPolicyAccept
 	table := n.getNFTByAddr(addr)
@@ -246,13 +270,13 @@ func (n *nftablesRunner) ClampMSSToPMTU(tun string, addr netip.Addr) error {
 		return fmt.Errorf("error ensuring filter table: %w", err)
 	}
 
-	// ensure forwarding chain exists
+	// ensure ts-clamp chain exists
 	fwChain, err := getOrCreateChain(n.conn, chainInfo{
 		table:         filterTable,
-		name:          "FORWARD",
+		name:          "ts-clamp",
 		chainType:     nftables.ChainTypeFilter,
 		chainHook:     nftables.ChainHookForward,
-		chainPriority: nftables.ChainPriorityFilter,
+		chainPriority: nftables.ChainPriorityMangle,
 		chainPolicy:   &polAccept,
 	})
 	if err != nil {
@@ -289,7 +313,7 @@ func (n *nftablesRunner) ClampMSSToPMTU(tun string, addr netip.Addr) error {
 				Xor:            []byte{0x00},
 			},
 			&expr.Cmp{
-				Op:       expr.CmpOpNeq,
+				Op:       expr.CmpOpNeq, // match any packet with a TCP flag set (SYN, ACK, RST)
 				Register: 1,
 				Data:     []byte{0x00},
 			},
@@ -423,7 +447,7 @@ func getOrCreateChain(c *nftables.Conn, cinfo chainInfo) (*nftables.Chain, error
 		// type/hook/priority, but for "conventional chains" assume they're what
 		// we expect (in case iptables-nft/ufw make minor behavior changes in
 		// the future).
-		if isTSChain(chain.Name) && (chain.Type != cinfo.chainType || chain.Hooknum != cinfo.chainHook || chain.Priority != cinfo.chainPriority) {
+		if isTSChain(chain.Name) && (chain.Type != cinfo.chainType || *chain.Hooknum != *cinfo.chainHook || *chain.Priority != *cinfo.chainPriority) {
 			return nil, fmt.Errorf("chain %s already exists with different type/hook/priority", cinfo.name)
 		}
 		return chain, nil
@@ -488,6 +512,12 @@ type NetfilterRunner interface {
 	// HasIPV6NAT reports true if the system supports IPv6 NAT.
 	HasIPV6NAT() bool
 
+	// HasIPV6Filter reports true if the system supports IPv6 filter tables
+	// This is only meaningful for iptables implementation, where hosts have
+	// partial ipables support (i.e missing filter table). For nftables
+	// implementation, this will default to the value of HasIPv6().
+	HasIPV6Filter() bool
+
 	// AddDNATRule adds a rule to the nat/PREROUTING chain to DNAT traffic
 	// destined for the given original destination to the given new destination.
 	// This is used to forward all traffic destined for the Tailscale interface
@@ -546,27 +576,25 @@ func newNfTablesRunner(logf logger.Logf) (*nftablesRunner, error) {
 	}
 	nft4 := &nftable{Proto: nftables.TableFamilyIPv4}
 
-	v6err := checkIPv6(logf)
+	v6err := CheckIPv6(logf)
 	if v6err != nil {
 		logf("disabling tunneled IPv6 due to system IPv6 config: %v", v6err)
 	}
 	supportsV6 := v6err == nil
-	supportsV6NAT := supportsV6 && checkSupportsV6NAT()
-
 	var nft6 *nftable
+
 	if supportsV6 {
-		logf("v6nat availability: %v", supportsV6NAT)
 		nft6 = &nftable{Proto: nftables.TableFamilyIPv6}
+		logf("v6nat availability: true")
 	}
 
 	// TODO(KevinLiang10): convert iptables rule to nftable rules if they exist in the iptables
 
 	return &nftablesRunner{
-		conn:           conn,
-		nft4:           nft4,
-		nft6:           nft6,
-		v6Available:    supportsV6,
-		v6NATAvailable: supportsV6NAT,
+		conn:        conn,
+		nft4:        nft4,
+		nft6:        nft6,
+		v6Available: supportsV6,
 	}, nil
 }
 
@@ -609,9 +637,20 @@ func (n *nftablesRunner) HasIPV6() bool {
 	return n.v6Available
 }
 
-// HasIPV6NAT returns true if the system supports IPv6 NAT.
+// HasIPV6NAT returns true if the system supports IPv6.
+// Kernel support for nftables was added after support for IPv6
+// NAT, so no need for a separate IPv6 NAT support check like we do for iptables.
+// https://tldp.org/HOWTO/Linux+IPv6-HOWTO/ch18s04.html
+// https://wiki.nftables.org/wiki-nftables/index.php/Building_and_installing_nftables_from_sources
 func (n *nftablesRunner) HasIPV6NAT() bool {
-	return n.v6NATAvailable
+	return n.v6Available
+}
+
+// HasIPV6Filter returns true if system supports IPv6. There are no known edge
+// cases where nftables running on a host that supports IPv6 would not support
+// filter table.
+func (n *nftablesRunner) HasIPV6Filter() bool {
+	return n.v6Available
 }
 
 // findRule iterates through the rules to find the rule with matching expressions.
@@ -866,7 +905,7 @@ func (n *nftablesRunner) createDummyPostroutingChains() (retErr error) {
 			return fmt.Errorf("create nat table: %w", err)
 		}
 		defer func(fm nftables.TableFamily) {
-			if err := deleteTableIfExists(n.conn, table.Proto, tsDummyTableName); err != nil && retErr == nil {
+			if err := deleteTableIfExists(n.conn, fm, tsDummyTableName); err != nil && retErr == nil {
 				retErr = fmt.Errorf("delete %q table: %w", tsDummyTableName, err)
 			}
 		}(table.Proto)

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"tailscale.com/client/web"
 	"tailscale.com/tsnet"
@@ -40,12 +41,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if *devMode {
+		os.Setenv("TS_DEBUG_WEB_CLIENT_DEV", "true")
+	}
+
 	// Serve the Tailscale web client.
-	ws, cleanup := web.NewServer(web.ServerOpts{
-		DevMode:     *devMode,
+	ws, err := web.NewServer(web.ServerOpts{
 		LocalClient: lc,
 	})
-	defer cleanup()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ws.Shutdown()
+
 	log.Printf("Serving Tailscale web client on http://%s", *addr)
 	if err := http.ListenAndServe(*addr, ws); err != nil {
 		if err != http.ErrServerClosed {

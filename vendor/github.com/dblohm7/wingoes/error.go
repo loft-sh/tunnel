@@ -79,6 +79,10 @@ func (hr HRESULT) Failed() bool {
 	return hr < 0
 }
 
+func (hr HRESULT) String() string {
+	return fmt.Sprintf("0x%08X", uint32(hr))
+}
+
 func (hr HRESULT) isNT() bool {
 	return (hr & (hrCustomerBit | hrFacilityNTBit)) == hrFacilityNTBit
 }

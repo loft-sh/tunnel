@@ -173,11 +173,11 @@ func NodeInfoHandler(coordinator *Coordinator) func(w http.ResponseWriter, r *ht
 		w.Header().Set("Content-Type", "application/json")
 
 		type nodeInfo struct {
-			NodeID     tailcfg.NodeID `json:"nodeId"`
-			UserID     tailcfg.UserID `json:"userId"`
 			MachineKey string         `json:"machineKey"`
 			NodeKey    string         `json:"nodeKey"`
 			Name       string         `json:"name"`
+			NodeID     tailcfg.NodeID `json:"nodeId"`
+			UserID     tailcfg.UserID `json:"userId"`
 		}
 
 		nodes := []nodeInfo{}
@@ -791,7 +791,6 @@ func defaultUserProfiles() []tailcfg.UserProfile {
 			LoginName:     "test",
 			DisplayName:   "Test User",
 			ProfilePicURL: "https://avatars.githubusercontent.com/u/0?v=4",
-			Groups:        []string{"admins"},
 		},
 	}
 }
