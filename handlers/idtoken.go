@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 )
@@ -14,7 +14,12 @@ const (
 	IDTokenPattern = "/machine/id-token"
 )
 
-func IDTokenHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+type IDTokenRequestHandler interface {
+	// IDToken handles the ID token request from a tailscale client.
+	IDToken(ctx context.Context, req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error)
+}
+
+func IDTokenHandler(coordinator IDTokenRequestHandler, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.TokenRequest
 

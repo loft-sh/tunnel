@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/tailcfg"
+	"tailscale.com/types/key"
 )
 
 const (
@@ -18,7 +18,14 @@ const (
 	KeyPattern = "/key"
 )
 
-func KeyHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
+type Keyer interface {
+	// ControlKey returns the control key for coordinator.
+	ControlKey() key.MachinePrivate
+	// LegacyControlKey returns the legacy control key for coordinator.
+	LegacyControlKey() key.MachinePrivate
+}
+
+func KeyHandler(coordinator Keyer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		v := r.URL.Query().Get("v")
 

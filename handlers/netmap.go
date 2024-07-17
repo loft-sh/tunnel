@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/smallzstd"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
@@ -25,7 +24,26 @@ const (
 	NetMapLegacyPattern = "/machine/{mkeyhex}/map"
 )
 
-func NetMapHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+type NetMapper interface {
+	// KeepAliveInterval is the keep alive interval used by the coordinator to
+	// periodically send keep alive messages to the tailscale client via the
+	// long poll NetMap request.
+	KeepAliveInterval() time.Duration
+	// NetMap handles the netmap polling request from a tailscale client. It
+	// returns a channel of netmap responses and a channel of errors.
+	//
+	// - If the request is a streaming one, the channels are not to be closed
+	// and new responses shall be sent via the channels.
+	//
+	// - If the request is a non-streaming one, the channels are to be closed
+	// after the first response is sent.
+	//
+	// - If the request gets closed or cancelled by the tailscale client, the
+	// context will be cancelled and the channels shall not be used anymore.
+	NetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
+}
+
+func NetMapHandler(coordinator NetMapper, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithCancelCause(r.Context())
 

@@ -4,7 +4,7 @@
 // Package slicesx contains some helpful generic slice functions.
 package slicesx
 
-import "math/rand"
+import "math/rand/v2"
 
 // Interleave combines two slices of the form [a, b, c] and [x, y, z] into a
 // slice with elements interleaved; i.e. [a, x, b, y, c, z].
@@ -34,11 +34,11 @@ func Shuffle[S ~[]T, T any](s S) {
 	n := len(s)
 	i := n - 1
 	for ; i > 1<<31-1-1; i-- {
-		j := int(rand.Int63n(int64(i + 1)))
+		j := int(rand.N(int64(i + 1)))
 		s[i], s[j] = s[j], s[i]
 	}
 	for ; i > 0; i-- {
-		j := int(rand.Int31n(int32(i + 1)))
+		j := int(rand.N(int32(i + 1)))
 		s[i], s[j] = s[j], s[i]
 	}
 }
@@ -87,6 +87,16 @@ func Filter[S ~[]T, T any](dst, src S, fn func(T) bool) S {
 	for _, x := range src {
 		if fn(x) {
 			dst = append(dst, x)
+		}
+	}
+	return dst
+}
+
+// AppendMatching appends elements in ps to dst if f(x) is true.
+func AppendMatching[T any](dst, ps []T, f func(T) bool) []T {
+	for _, p := range ps {
+		if f(p) {
+			dst = append(dst, p)
 		}
 	}
 	return dst
