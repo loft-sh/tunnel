@@ -29,6 +29,7 @@ type NetMapper interface {
 	// periodically send keep alive messages to the tailscale client via the
 	// long poll NetMap request.
 	KeepAliveInterval() time.Duration
+
 	// NetMap handles the netmap polling request from a tailscale client. It
 	// returns a channel of netmap responses and a channel of errors.
 	//
@@ -41,6 +42,19 @@ type NetMapper interface {
 	// - If the request gets closed or cancelled by the tailscale client, the
 	// context will be cancelled and the channels shall not be used anymore.
 	NetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan tailcfg.MapResponse, chan error)
+}
+
+type RawNetMapper interface {
+	// RawNetMap handles the netmap polling requests from a tailscale client,
+	// but isn't limited by the response that it can send to the client.
+	//
+	// This becomes particularly useful when working with clients with different
+	// capability versions and potentially fields that don't exist in
+	// newer versions.
+	//
+	// The behaviour of RawNetMap is the same as of NetMap, with the difference
+	// that if this interface is satisfied, the NetMap function is never called.
+	RawNetMap(ctx context.Context, req tailcfg.MapRequest, peerPublicKey key.MachinePublic) (chan any, chan error)
 }
 
 func NetMapHandler(coordinator NetMapper, peerPublicKey key.MachinePublic) http.HandlerFunc {
@@ -56,13 +70,23 @@ func NetMapHandler(coordinator NetMapper, peerPublicKey key.MachinePublic) http.
 			return
 		}
 
-		resChan, errChan := coordinator.NetMap(ctx, req, peerPublicKey)
+		var (
+			resChan chan tailcfg.MapResponse
+			rawChan chan any
+			errChan chan error
+		)
+
+		if mapper, ok := coordinator.(RawNetMapper); ok {
+			rawChan, errChan = mapper.RawNetMap(ctx, req, peerPublicKey)
+		} else {
+			resChan, errChan = coordinator.NetMap(ctx, req, peerPublicKey)
+		}
 
 		keepAliveTicker := time.NewTicker(coordinator.KeepAliveInterval())
 		defer keepAliveTicker.Stop()
 
 		var (
-			res  tailcfg.MapResponse
+			res  any
 			more bool
 		)
 
@@ -71,6 +95,7 @@ func NetMapHandler(coordinator NetMapper, peerPublicKey key.MachinePublic) http.
 			case _, more = <-ctx.Done():
 			case err, more = <-errChan:
 			case res, more = <-resChan:
+			case res, more = <-rawChan:
 			case _, more = <-keepAliveTicker.C:
 				now := time.Now()
 				res = tailcfg.MapResponse{
@@ -99,7 +124,7 @@ func NetMapHandler(coordinator NetMapper, peerPublicKey key.MachinePublic) http.
 	}
 }
 
-func writeResponse(w http.ResponseWriter, compress string, res tailcfg.MapResponse) error {
+func writeResponse(w http.ResponseWriter, compress string, res any) error {
 	var payload []byte
 
 	marshalled, err := json.Marshal(res)

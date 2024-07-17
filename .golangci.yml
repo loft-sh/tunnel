@@ -5,28 +5,29 @@ linters:
   enable-all: true
   # Disable deprecated linters
   disable:
+    - cyclop
     - deadcode
     - exhaustivestruct
+    - exhaustruct
+    - funlen
+    - gci
+    - gochecknoglobals
     - golint
+    - gomnd
+    - gosec
     - ifshort
     - interfacer
+    - lll
+    - makezero
     - maligned
+    - mnd
+    - nlreturn
     - nosnakecase
     - scopelint
     - structcheck
     - varcheck
-    - mnd
-
-    - exhaustruct
-    - nlreturn
     - varnamelen
-    - lll
     - wsl
-    - gosec
-    - gomnd
-    - gochecknoglobals
-    - makezero
-    - gci
 
 linters-settings:
   gofmt:
