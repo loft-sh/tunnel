@@ -15,6 +15,7 @@ linters:
     - scopelint
     - structcheck
     - varcheck
+    - mnd
 
     - exhaustruct
     - nlreturn

@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 )
@@ -15,7 +15,12 @@ const (
 	SetDNSLegacyPattern = "/machine/{mkeyhex}/set-dns"
 )
 
-func SetDNSHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+type DNSSetter interface {
+	// SetDNS handles the DNS setting request from a tailscale client.
+	SetDNS(ctx context.Context, req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error)
+}
+
+func SetDNSHandler(coordinator DNSSetter, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.SetDNSRequest
 

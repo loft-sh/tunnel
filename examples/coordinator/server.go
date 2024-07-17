@@ -197,7 +197,7 @@ func NodeInfoHandler(coordinator *Coordinator) func(w http.ResponseWriter, r *ht
 		err := json.NewEncoder(w).Encode(nodes)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+			_, _ = fmt.Fprintf(w, `{"error": "%s"}`, err.Error())
 		}
 	}
 }
@@ -231,8 +231,8 @@ type Node struct {
 
 // Coordinator is a coordinator.
 type Coordinator struct {
-	nodeMutex sync.Mutex
 	nodes     map[key.MachinePublic]Node
+	nodeMutex sync.Mutex
 }
 
 // NewCoordinator creates a new coordinator.
@@ -285,26 +285,6 @@ func NewCoordinator() *Coordinator {
 	}
 
 	return coordinator
-}
-
-// SSHAction implements tunnel.Coordinator.
-func (*Coordinator) SSHAction(r *http.Request, peerPublicKey key.MachinePublic) (tailcfg.SSHAction, error) {
-	panic("unimplemented")
-}
-
-// HealthChange implements tunnel.Coordinator.
-func (*Coordinator) HealthChange(ctx context.Context, req tailcfg.HealthChangeRequest) {
-	panic("unimplemented")
-}
-
-// IDToken implements tunnel.Coordinator.
-func (*Coordinator) IDToken(ctx context.Context, req tailcfg.TokenRequest, peerPublicKey key.MachinePublic) (tailcfg.TokenResponse, error) {
-	panic("unimplemented")
-}
-
-// SetDNS implements tunnel.Coordinator.
-func (*Coordinator) SetDNS(ctx context.Context, req tailcfg.SetDNSRequest, peerPublicKey key.MachinePublic) (tailcfg.SetDNSResponse, error) {
-	panic("unimplemented")
 }
 
 // DerpMap implements tunnel.Coordinator.
@@ -611,8 +591,8 @@ func (t *Coordinator) RegisterMachine(ctx context.Context, req tailcfg.RegisterR
 		},
 		Login: tailcfg.Login{
 			ID:        tailcfg.LoginID(userID),
-			Provider:  req.Auth.Provider,
-			LoginName: req.Auth.LoginName,
+			Provider:  "unknown",
+			LoginName: fmt.Sprintf("userid-%v", userID),
 		},
 	}
 
@@ -659,8 +639,8 @@ func (t *Coordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPubli
 	return node, nil
 }
 
-// TSCoordinator implements tunnel.Coordinator.
-var _ tunnel.Coordinator = (*Coordinator)(nil)
+// TSCoordinator implements tunnel.BareCoordinator.
+var _ tunnel.BareCoordinator = (*Coordinator)(nil)
 
 // --- Utils ---
 

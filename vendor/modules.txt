@@ -16,7 +16,7 @@ github.com/buger/jsonparser
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/coreos/go-iptables v0.7.0
+# github.com/coreos/go-iptables v0.7.1-0.20240112124308-65c67c9f46e6
 ## explicit; go 1.16
 github.com/coreos/go-iptables/iptables
 # github.com/coreos/go-semver v0.3.1
@@ -31,7 +31,7 @@ github.com/dblohm7/wingoes
 # github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f
 ## explicit
 github.com/dgryski/go-rendezvous
-# github.com/go-chi/chi/v5 v5.0.12
+# github.com/go-chi/chi/v5 v5.1.0
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
 github.com/go-chi/chi/v5/middleware
@@ -63,8 +63,8 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/google/nftables v0.1.1-0.20230115205135-9aa6fdf5a28c
-## explicit; go 1.17
+# github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806
+## explicit; go 1.21
 github.com/google/nftables
 github.com/google/nftables/alignedbuff
 github.com/google/nftables/binaryutil
@@ -85,7 +85,7 @@ github.com/josharian/native
 ## explicit; go 1.20
 github.com/jsimonetti/rtnetlink
 github.com/jsimonetti/rtnetlink/internal/unix
-# github.com/klauspost/compress v1.17.8
+# github.com/klauspost/compress v1.17.9
 ## explicit; go 1.20
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
@@ -100,7 +100,7 @@ github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
 # github.com/loft-sh/tunnel v0.1.0 => .
-## explicit; go 1.22.2
+## explicit; go 1.22.5
 # github.com/mailru/easyjson v0.7.7
 ## explicit; go 1.12
 github.com/mailru/easyjson/buffer
@@ -249,14 +249,13 @@ go4.org/mem
 # go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 ## explicit; go 1.18
 go4.org/netipx
-# golang.org/x/crypto v0.22.0
-## explicit; go 1.18
+# golang.org/x/crypto v0.25.0
+## explicit; go 1.20
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/curve25519
-golang.org/x/crypto/curve25519/internal/field
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
@@ -266,10 +265,13 @@ golang.org/x/crypto/ocsp
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/scrypt
-# golang.org/x/mod v0.14.0
+# golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
+## explicit; go 1.20
+golang.org/x/exp/constraints
+# golang.org/x/mod v0.17.0
 ## explicit; go 1.18
 golang.org/x/mod/semver
-# golang.org/x/net v0.24.0
+# golang.org/x/net v0.27.0
 ## explicit; go 1.18
 golang.org/x/net/bpf
 golang.org/x/net/dns/dnsmessage
@@ -288,11 +290,11 @@ golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/route
 golang.org/x/net/trace
-# golang.org/x/sync v0.6.0
+# golang.org/x/sync v0.7.0
 ## explicit; go 1.18
 golang.org/x/sync/errgroup
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.19.0
+# golang.org/x/sys v0.22.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
@@ -300,29 +302,29 @@ golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/mgr
-# golang.org/x/text v0.14.0
+# golang.org/x/text v0.16.0
 ## explicit; go 1.18
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/tools v0.17.0
-## explicit; go 1.18
+# golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d
+## explicit; go 1.19
 golang.org/x/tools/go/gcexportdata
 golang.org/x/tools/go/internal/packagesdriver
 golang.org/x/tools/go/packages
 golang.org/x/tools/go/types/objectpath
+golang.org/x/tools/internal/aliases
 golang.org/x/tools/internal/event
 golang.org/x/tools/internal/event/core
 golang.org/x/tools/internal/event/keys
 golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/event/tag
 golang.org/x/tools/internal/gcimporter
 golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/packagesinternal
 golang.org/x/tools/internal/pkgbits
+golang.org/x/tools/internal/stdlib
 golang.org/x/tools/internal/tokeninternal
-golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
 # golang.zx2c4.com/wireguard/windows v0.5.3
@@ -392,7 +394,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/protobuf v1.32.0
+# google.golang.org/protobuf v1.33.0
 ## explicit; go 1.17
 google.golang.org/protobuf/encoding/protojson
 google.golang.org/protobuf/encoding/prototext
@@ -400,6 +402,7 @@ google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/descfmt
 google.golang.org/protobuf/internal/descopts
 google.golang.org/protobuf/internal/detrand
+google.golang.org/protobuf/internal/editiondefaults
 google.golang.org/protobuf/internal/encoding/defval
 google.golang.org/protobuf/internal/encoding/json
 google.golang.org/protobuf/internal/encoding/messageset
@@ -423,6 +426,7 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
+google.golang.org/protobuf/types/gofeaturespb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb
@@ -439,7 +443,7 @@ nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/util
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# tailscale.com v1.64.2
+# tailscale.com v1.68.2
 ## explicit; go 1.22.0
 tailscale.com
 tailscale.com/atomicfile
@@ -451,7 +455,6 @@ tailscale.com/hostinfo
 tailscale.com/net/dns/recursive
 tailscale.com/net/dnscache
 tailscale.com/net/dnsfallback
-tailscale.com/net/interfaces
 tailscale.com/net/netaddr
 tailscale.com/net/netknob
 tailscale.com/net/netmon
@@ -477,6 +480,7 @@ tailscale.com/types/ptr
 tailscale.com/types/structs
 tailscale.com/types/tkatype
 tailscale.com/types/views
+tailscale.com/util/cibuild
 tailscale.com/util/clientmetric
 tailscale.com/util/cloudenv
 tailscale.com/util/cmpver
@@ -492,5 +496,6 @@ tailscale.com/util/singleflight
 tailscale.com/util/slicesx
 tailscale.com/util/vizerror
 tailscale.com/util/winutil
+tailscale.com/util/winutil/winenv
 tailscale.com/version
 tailscale.com/version/distro

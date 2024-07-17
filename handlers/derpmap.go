@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
+	"tailscale.com/tailcfg"
 )
 
 const (
@@ -12,7 +13,12 @@ const (
 	DerpMapPattern = "/derpmap/default"
 )
 
-func DerpMapHandler(coordinator tunnel.Coordinator) http.HandlerFunc {
+type DerpMapper interface {
+	// DerpMap returns the DERP map from the coordinator.
+	DerpMap(ctx context.Context) (tailcfg.DERPMap, error)
+}
+
+func DerpMapHandler(coordinator DerpMapper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := coordinator.DerpMap(r.Context())
 		if err != nil {

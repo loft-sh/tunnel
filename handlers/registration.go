@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 )
@@ -15,7 +15,14 @@ const (
 	RegistrationLegacyPattern = "/machine/{mkeyhex}"
 )
 
-func RegistrationHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+type Registerer interface {
+	// RegisterMachine is responsible for registering the machine with the
+	// coordinator. It returns the registration response from the coordinator
+	// and an error if any.
+	RegisterMachine(ctx context.Context, req tailcfg.RegisterRequest, peerPublicKey key.MachinePublic) (tailcfg.RegisterResponse, error)
+}
+
+func RegistrationHandler(coordinator Registerer, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(r.Body)
 

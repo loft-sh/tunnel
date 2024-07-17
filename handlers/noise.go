@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"tailscale.com/control/controlhttp"
@@ -18,7 +17,11 @@ const (
 	NoisePattern = "/ts2021"
 )
 
-func NoiseHandler(coordinator tunnel.Coordinator, subPath string) http.HandlerFunc {
+type CustomNoiseHandlerRegisterer interface {
+	RegisterHandler(r *http.ServeMux)
+}
+
+func NoiseHandler(coordinator Coordinator, subPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := controlhttp.AcceptHTTP(r.Context(), w, r, coordinator.ControlKey(), nil)
 		if err != nil {
@@ -38,15 +41,28 @@ func NoiseHandler(coordinator tunnel.Coordinator, subPath string) http.HandlerFu
 	}
 }
 
-func CreatePeerHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic, subPath string) http.Handler {
+func CreatePeerHandler(coordinator Coordinator, peerPublicKey key.MachinePublic, subPath string) http.Handler {
 	r := http.NewServeMux()
 
 	r.HandleFunc(RegistrationMethod+" "+RegistrationPattern, RegistrationHandler(coordinator, peerPublicKey))
 	r.HandleFunc(NetMapMethod+" "+NetMapPattern, NetMapHandler(coordinator, peerPublicKey))
-	r.HandleFunc(SetDNSMethod+" "+SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
-	r.HandleFunc(HealthChangeMethod+" "+HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
-	r.HandleFunc(IDTokenMethod+" "+IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
-	r.HandleFunc(SSHActionMethod+" "+SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
+
+	if coordinator, ok := coordinator.(DNSSetter); ok {
+		r.HandleFunc(SetDNSMethod+" "+SetDNSPattern, SetDNSHandler(coordinator, peerPublicKey))
+	}
+	if coordinator, ok := coordinator.(HealthChanger); ok {
+		r.HandleFunc(HealthChangeMethod+" "+HealthChangePattern, HealthChangeHandler(coordinator, peerPublicKey))
+	}
+	if coordinator, ok := coordinator.(IDTokenRequestHandler); ok {
+		r.HandleFunc(IDTokenMethod+" "+IDTokenPattern, IDTokenHandler(coordinator, peerPublicKey))
+	}
+	if coordinator, ok := coordinator.(SSHActioner); ok {
+		r.HandleFunc(SSHActionMethod+" "+SSHActionPattern, SSHActionHandler(coordinator, peerPublicKey))
+	}
+
+	if coordinator, ok := coordinator.(CustomNoiseHandlerRegisterer); ok {
+		coordinator.RegisterHandler(r)
+	}
 
 	if subPath != "/" {
 		return http.StripPrefix(subPath, r)

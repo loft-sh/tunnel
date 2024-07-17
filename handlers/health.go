@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/loft-sh/tunnel"
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/key"
 )
@@ -14,7 +14,12 @@ const (
 	HealthChangePattern = "/machine/health-change"
 )
 
-func HealthChangeHandler(coordinator tunnel.Coordinator, peerPublicKey key.MachinePublic) http.HandlerFunc {
+type HealthChanger interface {
+	// HealthChange handles the health change request from a tailscale client.
+	HealthChange(ctx context.Context, req tailcfg.HealthChangeRequest)
+}
+
+func HealthChangeHandler(coordinator HealthChanger, peerPublicKey key.MachinePublic) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req tailcfg.HealthChangeRequest
 
