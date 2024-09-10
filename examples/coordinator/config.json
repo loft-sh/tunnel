@@ -1,17 +1,14 @@
 {
   "httpListenAddr": ":3000",
-
   "controlKeyLocation": "tmp/control.key",
   "legacyControlKeyLocation": "tmp/legacy.key",
   "baseDomain": "ts.loft",
   "cidr": "100.64.0.0/10",
-
   "userProfiles": [
     {
       "ID": 100,
       "DisplayName": "Test User",
       "LoginName": "testuser",
-      "Groups": ["testgroup"],
       "ProfilePicURL": "",
       "Roles": {}
     },
@@ -19,18 +16,16 @@
       "ID": 200,
       "DisplayName": "Another Test User",
       "LoginName": "another-testuser",
-      "Groups": ["anoter-testgroup"],
       "ProfilePicURL": "",
       "Roles": {}
     }
   ],
-
   "nodes": [
     {
       "name": "node1.ts.loft.",
       "nodeId": 1,
       "userId": 100,
-      "nodeKey":  "nodekey:114c3b606b1f35b4b59b46f21bb9bb8ce7498541adf5feb178a6f57bc71e4864",
+      "nodeKey": "nodekey:114c3b606b1f35b4b59b46f21bb9bb8ce7498541adf5feb178a6f57bc71e4864",
       "machineKey": "mkey:ec7971b903bf82bb2fbe6af6b041171fd976c44e7c60ddf2f148e44ba5711417",
       "ip": "100.100.200.200"
     }

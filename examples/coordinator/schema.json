@@ -182,6 +182,12 @@
         "RegionName": {
           "type": "string"
         },
+        "Latitude": {
+          "type": "number"
+        },
+        "Longitude": {
+          "type": "number"
+        },
         "Avoid": {
           "type": "boolean"
         },
@@ -241,12 +247,6 @@
         },
         "Roles": {
           "$ref": "#/$defs/emptyStructJSONSlice"
-        },
-        "Groups": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
         }
       },
       "additionalProperties": false,
