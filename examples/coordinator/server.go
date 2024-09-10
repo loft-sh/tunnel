@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,41 +51,14 @@ var (
 // Config is the configuration for the coordinator.
 // This is useful for running test scenarios with a pre-configured coordinator.
 type Config struct {
-	// HTTPListenAddr is the address that the coordinator will listen on.
-	//
-	// Defaults to ":3000".
-	HTTPListenAddr string `json:"httpListenAddr,omitempty"`
-
 	// ControlKey is the control key of the coordinator.
 	//
 	// Either this or ControlKeyLocation needs to be set.
 	ControlKey *key.MachinePrivate `json:"controlKey,omitempty"`
-	// ControlKeyLocation is the location of the control key on disk.
-	//
-	// Either this or ControlKey needs to be set.
-	ControlKeyLocation string `json:"controlKeyLocation,omitempty"`
 	// LegacyControlKey is the legacy control key of the coordinator.
 	//
 	// Either this or LegacyControlKeyLocation needs to be set.
 	LegacyControlKey *key.MachinePrivate `json:"legacyControlKey,omitempty"`
-	// LegacyControlKeyLocation is the location of the legacy control key on
-	// disk.
-	//
-	// Either this or LegacyControlKey needs to be set.
-	LegacyControlKeyLocation string `json:"legacyControlKeyLocation,omitempty"`
-	// BaseDomain is the base domain of the coordinator. This is also known as
-	// tailnet
-	BaseDomain string `json:"baseDomain"`
-	// CIDR is the CIDR of the tailnet.
-	CIDR string `json:"cidr"`
-	// KeepAliveInterval is the keep alive interval of the coordinator.
-	//
-	// This is the interval in which the coordinator will send keep alive
-	// messages to the nodes. It will also be reused as the interval for the
-	// cleanup goroutine that removes nodes that have disconnected.
-	//
-	// Defaults to 60 seconds.
-	KeepAliveInterval time.Duration `json:"keepAliveInterval,omitempty"`
 	// DerpMap is the DERP map that the coordinator will include in the
 	// MapResponse.
 	DerpMap *tailcfg.DERPMap `json:"derpMap,omitempty"`
@@ -108,13 +82,41 @@ type Config struct {
 		NodeKey string `json:"nodeKey,omitempty"`
 		// MachineKey is the peer public key of the node.
 		MachineKey string `json:"machineKey"`
+		// IP is the IP of the node.
+		IP string `json:"ip,omitempty"`
 		// UserID is the user id of the node.
 		UserID tailcfg.UserID `json:"userId"`
 		// NodeID is the node id of the node.
 		NodeID tailcfg.NodeID `json:"nodeId"`
-		// IP is the IP of the node.
-		IP string `json:"ip,omitempty"`
 	} `json:"nodes,omitempty"`
+
+	// HTTPListenAddr is the address that the coordinator will listen on.
+	//
+	// Defaults to ":3000".
+	HTTPListenAddr string `json:"httpListenAddr,omitempty"`
+
+	// ControlKeyLocation is the location of the control key on disk.
+	//
+	// Either this or ControlKey needs to be set.
+	ControlKeyLocation string `json:"controlKeyLocation,omitempty"`
+	// LegacyControlKeyLocation is the location of the legacy control key on
+	// disk.
+	//
+	// Either this or LegacyControlKey needs to be set.
+	LegacyControlKeyLocation string `json:"legacyControlKeyLocation,omitempty"`
+	// BaseDomain is the base domain of the coordinator. This is also known as
+	// tailnet
+	BaseDomain string `json:"baseDomain"`
+	// CIDR is the CIDR of the tailnet.
+	CIDR string `json:"cidr"`
+	// KeepAliveInterval is the keep alive interval of the coordinator.
+	//
+	// This is the interval in which the coordinator will send keep alive
+	// messages to the nodes. It will also be reused as the interval for the
+	// cleanup goroutine that removes nodes that have disconnected.
+	//
+	// Defaults to 60 seconds.
+	KeepAliveInterval time.Duration `json:"keepAliveInterval,omitempty"`
 }
 
 func main() {
@@ -129,7 +131,8 @@ func main() {
 		panic(err)
 	}
 
-	ctx := context.TODO()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer stop()
 
 	ipam = goipam.New(ctx)
 
@@ -150,13 +153,12 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	coordinator := NewCoordinator()
+	coordinator := NewCoordinator(ctx)
 	r.Mount("/", handlers.CoordinatorHandler(coordinator))
 
 	r.Get("/nodes", NodeInfoHandler(coordinator))
 
 	addr := ":3000"
-
 	if config.HTTPListenAddr != "" {
 		addr = config.HTTPListenAddr
 	}
@@ -218,16 +220,19 @@ type Node struct {
 	// API error message to the peer and close the connection
 	ErrChan chan error
 
-	// MapRequest is the map request of the node.
-	MapRequest tailcfg.MapRequest
-	// Node is the node of the node.
-	Node tailcfg.Node
-
 	// RemovalTimer is the timer that will remove the node from the coordinator.
 	// This is used to cleanup nodes that have disconnected, if they have not
 	// reconnected within the keep alive interval.
 	RemovalTimer *time.Timer
+	// Node is the node of the node.
+	Node tailcfg.Node
+
+	// MapRequest is the map request of the node.
+	MapRequest tailcfg.MapRequest
 }
+
+// TSCoordinator implements tunnel.BareCoordinator.
+var _ tunnel.BareCoordinator = (*Coordinator)(nil)
 
 // Coordinator is a coordinator.
 type Coordinator struct {
@@ -236,7 +241,7 @@ type Coordinator struct {
 }
 
 // NewCoordinator creates a new coordinator.
-func NewCoordinator() *Coordinator {
+func NewCoordinator(ctx context.Context) *Coordinator {
 	coordinator := &Coordinator{
 		nodes: map[key.MachinePublic]Node{},
 	}
@@ -261,7 +266,7 @@ func NewCoordinator() *Coordinator {
 		var ip *goipam.IP
 
 		if node.IP != "" {
-			ip, err = ipam.AcquireSpecificIP(context.TODO(), prefix.Cidr, node.IP)
+			ip, err = ipam.AcquireSpecificIP(ctx, prefix.Cidr, node.IP)
 			if err != nil {
 				panic(err)
 			}
@@ -638,9 +643,6 @@ func (t *Coordinator) authenticateMachine(req tailcfg.RegisterRequest, peerPubli
 
 	return node, nil
 }
-
-// TSCoordinator implements tunnel.BareCoordinator.
-var _ tunnel.BareCoordinator = (*Coordinator)(nil)
 
 // --- Utils ---
 
