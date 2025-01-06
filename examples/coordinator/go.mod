@@ -4,7 +4,7 @@ go 1.22.5
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0
-	github.com/invopop/jsonschema v0.12.0
+	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/tunnel v0.1.0
 	github.com/metal-stack/go-ipam v1.13.0
 	tailscale.com v1.68.2
